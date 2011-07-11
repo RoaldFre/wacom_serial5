@@ -68,7 +68,7 @@ MODULE_LICENSE("GPL");
 #define COMMAND_Z_FILTER			"ZF1\r"
 
 /* Note that this is a protocol 4 packet without tilt information. */
-#define PACKET_LENGTH 7
+#define PACKET_LENGTH 9 //TODO: was originally 7 -- should also be 9 for protocol4 with tilt?
 
 /* device IDs from wacom_wac.h */
 #define STYLUS_DEVICE_ID	0x02
@@ -355,10 +355,11 @@ static void handle_packet5(struct wacom *wacom)
 			tilty -= (TILT_BITS + 1);
 		in_proximity_p = (data[0] & PROXIMITY_BIT);
 
-#if 0
-		dev_info(&wacom->dev->dev,
-				"Tilt x: %d  y: %d\n", tiltx, tilty);
-#endif
+		input_report_abs(wacom->dev, ABS_X, x);
+		input_report_abs(wacom->dev, ABS_Y, y);
+		input_report_abs(wacom->dev, ABS_TILT_X, tiltx);
+		input_report_abs(wacom->dev, ABS_TILT_Y, tilty);
+		input_report_abs(wacom->dev, ABS_PRESSURE, z);
 	}
 
 	else
@@ -375,11 +376,6 @@ static void handle_packet5(struct wacom *wacom)
 */
 
 
-	input_report_abs(wacom->dev, ABS_X, x);
-	input_report_abs(wacom->dev, ABS_Y, y);
-	input_report_abs(wacom->dev, ABS_TILT_X, tiltx);
-	input_report_abs(wacom->dev, ABS_TILT_Y, tilty);
-	input_report_abs(wacom->dev, ABS_PRESSURE, z);
 	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
 			                             !stylus_p);
 	input_report_key(wacom->dev, BTN_TOOL_RUBBER, in_proximity_p &&
