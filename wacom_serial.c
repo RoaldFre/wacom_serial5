@@ -103,6 +103,8 @@ static void handle_model_response(struct wacom *wacom)
 	int major_v, minor_v, max_z;
 	char *p;
 
+	dev_dbg(&wacom->dev->dev, "Model string: %s\n", wacom->data);
+
 	major_v = minor_v = 0;
 	p = strrchr(wacom->data, 'V');
 	if (p)
@@ -180,6 +182,7 @@ static void handle_coordinates_response(struct wacom *wacom)
 {
 	int x, y;
 
+	dev_dbg(&wacom->dev->dev, "Coordinates string: %s\n", wacom->data);
 	sscanf(wacom->data, "~C%u,%u", &x, &y);
 	input_set_abs_params(wacom->dev, ABS_X, 0, x, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_Y, 0, y, 0, 0);
@@ -187,6 +190,9 @@ static void handle_coordinates_response(struct wacom *wacom)
 
 static void handle_response(struct wacom *wacom)
 {
+	printk(KERN_INFO DRIVER_DESC": handle_response %c%c\n", 
+			wacom->data[0],
+			wacom->data[1]);
 	if (wacom->data[0] != '~' || wacom->idx < 2) {
 		dev_dbg(&wacom->dev->dev, "got a garbled response of length "
 			                  "%d.\n", wacom->idx);
@@ -214,6 +220,11 @@ static void handle_response(struct wacom *wacom)
 
 static void handle_packet(struct wacom *wacom)
 {
+	printk(KERN_INFO DRIVER_DESC": handle_packet %x %x %x %x\n",
+			wacom->data[0],
+			wacom->data[1],
+			wacom->data[2],
+			wacom->data[3]);
 	int in_proximity_p, stylus_p, button, x, y, z;
 	int device;
 
@@ -354,19 +365,25 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 
 	init_completion(&wacom->cmd_done);
 	printk(KERN_INFO DRIVER_DESC": init_completion succesful\n");
-	err = wacom_send(serio, REQUEST_CONFIGURATION_STRING);
-	if (err)
-		return err;
-	printk(KERN_INFO DRIVER_DESC": wacom_send REQUEST_CONFIGURATION_STRING succesful\n");
 
-	u = wait_for_completion_timeout(&wacom->cmd_done, HZ);
-	if (u == 0) {
-		dev_info(&wacom->dev->dev, "Timed out waiting for tablet to "
-			 "respond with configuration string.\n");
-		return -EIO;
+
+
+
+	if (wacom->dev->id.version != MODEL_INTUOS) {
+		err = wacom_send(serio, REQUEST_CONFIGURATION_STRING);
+		if (err)
+			return err;
+		printk(KERN_INFO DRIVER_DESC": wacom_send REQUEST_CONFIGURATION_STRING succesful\n");
+
+		u = wait_for_completion_timeout(&wacom->cmd_done, HZ);
+		if (u == 0) {
+			dev_info(&wacom->dev->dev, "Timed out waiting for tablet to "
+				 "respond with configuration string.\n");
+			return -EIO;
+		}
 	}
 
-	printk(KERN_INFO DRIVER_DESC": wait_for_completion_timeout succesful\n");
+
 
 	/* UNTESTED: Apparently Graphire models do not answer coordinate
 	   requests. */
