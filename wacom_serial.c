@@ -278,8 +278,9 @@ static void handle_packet(struct wacom *wacom)
 
 static void handle_packet5(struct wacom *wacom)
 {
-	int in_proximity_p, stylus_p, buttons, abswheel, x, y, z, tiltx, tilty;
-	int device, device_id;
+	int in_proximity_p, buttons, abswheel, x, y, z, tiltx, tilty;
+	int device_id;
+	static int device; //TODO need this? better way?
 
 	unsigned char *data;
 
@@ -367,21 +368,16 @@ static void handle_packet5(struct wacom *wacom)
 				"Received unknown packet type!\n");
 	
 
-	stylus_p = 1; //TODO
 
-	/* UNTESTED Graphire eraser (according to old wcmSerial code) */
-/*
-	if (button & 8)
-		device = ERASER_DEVICE_ID;
-*/
-
-
+	//TODO: remove redundancy
 	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
-			                             !stylus_p);
+						device == CURSOR_DEVICE_ID);
 	input_report_key(wacom->dev, BTN_TOOL_RUBBER, in_proximity_p &&
-			                              stylus_p && buttons & 4);
-	input_report_key(wacom->dev, BTN_TOOL_PEN, in_proximity_p && stylus_p &&
-                                                   !(buttons & 4));
+						device == ERASER_DEVICE_ID);
+	input_report_key(wacom->dev, BTN_TOOL_PEN, in_proximity_p &&
+						device == STYLUS_DEVICE_ID);
+
+
 	input_report_key(wacom->dev, BTN_TOUCH, buttons & 1);
 	input_report_key(wacom->dev, BTN_STYLUS, buttons & 2);
 	input_sync(wacom->dev);
