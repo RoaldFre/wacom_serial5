@@ -77,6 +77,29 @@ MODULE_LICENSE("GPL");
 #define ERASER_DEVICE_ID        0x0A
 #define PAD_DEVICE_ID           0x0F
 
+#define TILT_SIGN_BIT   0x40
+#define TILT_BITS       0x3F
+#define PROXIMITY_BIT   0x40
+
+
+
+
+/* NOT USED YET
+#define PEN(ds)         ((((ds)->device_id) & 0x07ff) == 0x0022 || \
+                         (((ds)->device_id) & 0x07ff) == 0x0042 || \
+                         (((ds)->device_id) & 0x07ff) == 0x0052)
+#define STROKING_PEN(ds) ((((ds)->device_id) & 0x07ff) == 0x0032)
+#define AIRBRUSH(ds)    ((((ds)->device_id) & 0x07ff) == 0x0112)
+#define MOUSE_4D(ds)    ((((ds)->device_id) & 0x07ff) == 0x0094)
+#define MOUSE_2D(ds)    ((((ds)->device_id) & 0x07ff) == 0x0007)
+#define LENS_CURSOR(ds) ((((ds)->device_id) & 0x07ff) == 0x0096)
+#define INKING_PEN(ds)  ((((ds)->device_id) & 0x07ff) == 0x0012)
+#define STYLUS_TOOL(ds) (PEN(ds) || STROKING_PEN(ds) || INKING_PEN(ds) || \
+                        AIRBRUSH(ds))
+#define CURSOR_TOOL(ds) (MOUSE_4D(ds) || LENS_CURSOR(ds) || MOUSE_2D(ds))
+*/
+
+
 struct wacom {
 	struct input_dev *dev;
 	struct completion cmd_done;
@@ -260,6 +283,93 @@ static void handle_packet(struct wacom *wacom)
 	input_sync(wacom->dev);
 }
 
+static void handle_packet5(struct wacom *wacom)
+{
+	printk(KERN_INFO DRIVER_DESC": handle_packet %x %x %x %x\n",
+			wacom->data[0],
+			wacom->data[1],
+			wacom->data[2],
+			wacom->data[3]);
+	int in_proximity_p, stylus_p, buttons, abswheel, x, y, z, tiltx, tilty;
+	int device;
+
+	unsigned char *data;
+
+	data = wacom->data;
+
+	if (data[0] & 1)
+		dev_info(&wacom->dev->dev,
+				"Received something from second channel!\n");
+
+	/* Device ID packet */
+	if ((data[0] & 0xfc) == 0xc0)
+		dev_info(&wacom->dev->dev, "Received Device ID packet!\n");
+
+	/* Out of proximity packet */
+	else if ((data[0] & 0xfe) == 0x80)
+	{
+		in_proximity_p = 0;
+	}
+
+	/* General pen packet or eraser packet or airbrush first packet
+	 * airbrush second packet */
+	else if (((data[0] & 0xb8) == 0xa0) ||
+			((data[0] & 0xbe) == 0xb4))
+	{
+		x = (((data[1] & 0x7f) << 9) |
+				((data[2] & 0x7f) << 2) |
+				((data[3] & 0x60) >> 5));
+		y = (((data[3] & 0x1f) << 11) |
+				((data[4] & 0x7f) << 4) |
+				((data[5] & 0x78) >> 3));
+		if ((data[0] & 0xb8) == 0xa0)
+		{
+			z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
+			buttons = (data[0] & 0x06);
+		}
+		else
+		{
+			/* 10 bits for absolute wheel position */
+			abswheel = (((data[5] & 0x07) << 7) |
+				(data[6] & 0x7f));
+		}
+		tiltx = (data[7] & TILT_BITS);
+		tilty = (data[8] & TILT_BITS);
+		if (data[7] & TILT_SIGN_BIT)
+			tiltx -= (TILT_BITS + 1);
+		if (data[8] & TILT_SIGN_BIT)
+			tilty -= (TILT_BITS + 1);
+		in_proximity_p = (data[0] & PROXIMITY_BIT);
+	}
+
+	else
+		dev_info(&wacom->dev->dev,
+				"Received unknown packet type!\n");
+	
+
+	stylus_p = 1; //TODO
+
+	device = stylus_p ? STYLUS_DEVICE_ID : CURSOR_DEVICE_ID;
+	/* UNTESTED Graphire eraser (according to old wcmSerial code) */
+/*
+	if (button & 8)
+		device = ERASER_DEVICE_ID;
+*/
+
+	input_report_key(wacom->dev, ABS_MISC, device);
+	input_report_abs(wacom->dev, ABS_X, x);
+	input_report_abs(wacom->dev, ABS_Y, y);
+	input_report_abs(wacom->dev, ABS_PRESSURE, z);
+	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
+			                             !stylus_p);
+	input_report_key(wacom->dev, BTN_TOOL_RUBBER, in_proximity_p &&
+			                              stylus_p && buttons & 4);
+	input_report_key(wacom->dev, BTN_TOOL_PEN, in_proximity_p && stylus_p &&
+                                                   !(buttons & 4));
+	input_report_key(wacom->dev, BTN_TOUCH, buttons & 1);
+	input_report_key(wacom->dev, BTN_STYLUS, buttons & 2);
+	input_sync(wacom->dev);
+}
 
 static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
 				   unsigned int flags)
@@ -280,7 +390,8 @@ static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
 	 * response string, or a seven-byte packet with the MSB set on
 	 * the first byte */
 	if (wacom->idx == PACKET_LENGTH && (wacom->data[0] & 0x80)) {
-		handle_packet(wacom);
+		//handle_packet(wacom);
+		handle_packet5(wacom);
 		wacom->idx = 0;
 	} else if (data == '\r' && !(wacom->data[0] & 0x80)) {
 		wacom->data[wacom->idx-1] = 0;
