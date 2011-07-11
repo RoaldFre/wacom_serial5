@@ -84,20 +84,18 @@ MODULE_LICENSE("GPL");
 
 
 
-/* NOT USED YET
-#define PEN(ds)         ((((ds)->device_id) & 0x07ff) == 0x0022 || \
-                         (((ds)->device_id) & 0x07ff) == 0x0042 || \
-                         (((ds)->device_id) & 0x07ff) == 0x0052)
-#define STROKING_PEN(ds) ((((ds)->device_id) & 0x07ff) == 0x0032)
-#define AIRBRUSH(ds)    ((((ds)->device_id) & 0x07ff) == 0x0112)
-#define MOUSE_4D(ds)    ((((ds)->device_id) & 0x07ff) == 0x0094)
-#define MOUSE_2D(ds)    ((((ds)->device_id) & 0x07ff) == 0x0007)
-#define LENS_CURSOR(ds) ((((ds)->device_id) & 0x07ff) == 0x0096)
-#define INKING_PEN(ds)  ((((ds)->device_id) & 0x07ff) == 0x0012)
-#define STYLUS_TOOL(ds) (PEN(ds) || STROKING_PEN(ds) || INKING_PEN(ds) || \
-                        AIRBRUSH(ds))
-#define CURSOR_TOOL(ds) (MOUSE_4D(ds) || LENS_CURSOR(ds) || MOUSE_2D(ds))
-*/
+#define PEN(id)         ((id & 0x07ff) == 0x0022 || \
+                         (id & 0x07ff) == 0x0042 || \
+                         (id & 0x07ff) == 0x0052)
+#define STROKING_PEN(id) ((id & 0x07ff) == 0x0032)
+#define AIRBRUSH(id)     ((id & 0x07ff) == 0x0112)
+#define MOUSE_4D(id)     ((id & 0x07ff) == 0x0094)
+#define MOUSE_2D(id)     ((id & 0x07ff) == 0x0007)
+#define LENS_CURSOR(id)  ((id & 0x07ff) == 0x0096)
+#define INKING_PEN(id)   ((id & 0x07ff) == 0x0012)
+#define STYLUS_TOOL(id)  (PEN(id) || STROKING_PEN(id) || INKING_PEN(id) || \
+                         AIRBRUSH(id))
+#define CURSOR_TOOL(id)  (MOUSE_4D(id) || LENS_CURSOR(id) || MOUSE_2D(id))
 
 
 struct wacom {
@@ -277,7 +275,7 @@ static void handle_packet(struct wacom *wacom)
 static void handle_packet5(struct wacom *wacom)
 {
 	int in_proximity_p, stylus_p, buttons, abswheel, x, y, z, tiltx, tilty;
-	int device;
+	int device, device_id;
 
 	unsigned char *data;
 
@@ -285,11 +283,23 @@ static void handle_packet5(struct wacom *wacom)
 
 	if (data[0] & 1)
 		dev_info(&wacom->dev->dev,
-				"Received something from second channel!\n");
+				"Received something from second channel. "
+				"Not implemented yet -> Dropped!\n");
 
 	/* Device ID packet */
-	if ((data[0] & 0xfc) == 0xc0)
-		dev_info(&wacom->dev->dev, "Received Device ID packet!\n");
+	if ((data[0] & 0xfc) == 0xc0) {
+		in_proximity_p = 1;
+
+		device_id = ((data[1] & 0x7f) << 5) | ((data[2] & 0x7c) >> 2);
+		
+		device = (STYLUS_TOOL(device_id) ? STYLUS_DEVICE_ID :
+			  CURSOR_TOOL(device_id) ? CURSOR_DEVICE_ID :
+						   ERASER_DEVICE_ID);
+
+		input_report_key(wacom->dev, ABS_MISC, device);
+
+		//TODO check for discard_first ?
+	}
 
 	/* Out of proximity packet */
 	else if ((data[0] & 0xfe) == 0x80)
@@ -335,14 +345,13 @@ static void handle_packet5(struct wacom *wacom)
 
 	stylus_p = 1; //TODO
 
-	device = stylus_p ? STYLUS_DEVICE_ID : CURSOR_DEVICE_ID;
 	/* UNTESTED Graphire eraser (according to old wcmSerial code) */
 /*
 	if (button & 8)
 		device = ERASER_DEVICE_ID;
 */
 
-	input_report_key(wacom->dev, ABS_MISC, device);
+
 	input_report_abs(wacom->dev, ABS_X, x);
 	input_report_abs(wacom->dev, ABS_Y, y);
 	input_report_abs(wacom->dev, ABS_PRESSURE, z);
