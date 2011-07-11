@@ -213,9 +213,6 @@ static void handle_coordinates_response(struct wacom *wacom)
 
 static void handle_response(struct wacom *wacom)
 {
-	printk(KERN_INFO DRIVER_DESC": handle_response %c%c\n", 
-			wacom->data[0],
-			wacom->data[1]);
 	if (wacom->data[0] != '~' || wacom->idx < 2) {
 		dev_dbg(&wacom->dev->dev, "got a garbled response of length "
 			                  "%d.\n", wacom->idx);
@@ -243,11 +240,6 @@ static void handle_response(struct wacom *wacom)
 
 static void handle_packet(struct wacom *wacom)
 {
-	printk(KERN_INFO DRIVER_DESC": handle_packet %x %x %x %x\n",
-			wacom->data[0],
-			wacom->data[1],
-			wacom->data[2],
-			wacom->data[3]);
 	int in_proximity_p, stylus_p, button, x, y, z;
 	int device;
 
@@ -284,11 +276,6 @@ static void handle_packet(struct wacom *wacom)
 
 static void handle_packet5(struct wacom *wacom)
 {
-	printk(KERN_INFO DRIVER_DESC": handle_packet %x %x %x %x\n",
-			wacom->data[0],
-			wacom->data[1],
-			wacom->data[2],
-			wacom->data[3]);
 	int in_proximity_p, stylus_p, buttons, abswheel, x, y, z, tiltx, tilty;
 	int device;
 
@@ -458,13 +445,11 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 	err = wacom_send(serio, COMMAND_STOP_SENDING_PACKETS);
 	if (err)
 		return err;
-	printk(KERN_INFO DRIVER_DESC": wacom_send COMMAND_STOP_SENDING_PACKETS succesful\n");
 
 	init_completion(&wacom->cmd_done);
 	err = wacom_send(serio, REQUEST_MODEL_AND_ROM_VERSION);
 	if (err)
 		return err;
-	printk(KERN_INFO DRIVER_DESC": wacom_send REQUEST_MODEL_AND_ROM_VERSION succesful\n");
 
 	u = wait_for_completion_timeout(&wacom->cmd_done, HZ);
 	if (u == 0) {
@@ -472,29 +457,24 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 			 "respond with model and version.\n");
 		return -EIO;
 	}
-	printk(KERN_INFO DRIVER_DESC": wait_for_completion_timeout succesful\n");
 
 	init_completion(&wacom->cmd_done);
-	printk(KERN_INFO DRIVER_DESC": init_completion succesful\n");
 
-
-
-
+	/* My Intuos tablet won't respond to a configuration request, so it 
+	 * seems */
 	if (wacom->dev->id.version != MODEL_INTUOS) {
 		err = wacom_send(serio, REQUEST_CONFIGURATION_STRING);
 		if (err)
 			return err;
-		printk(KERN_INFO DRIVER_DESC": wacom_send REQUEST_CONFIGURATION_STRING succesful\n");
 
 		u = wait_for_completion_timeout(&wacom->cmd_done, HZ);
 		if (u == 0) {
-			dev_info(&wacom->dev->dev, "Timed out waiting for tablet to "
-				 "respond with configuration string.\n");
+			dev_info(&wacom->dev->dev, "Timed out waiting for "
+					"tablet to respond with "
+					"configuration string.\n");
 			return -EIO;
 		}
 	}
-
-
 
 	/* UNTESTED: Apparently Graphire models do not answer coordinate
 	   requests. */
@@ -544,17 +524,14 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	err = serio_open(serio, drv);
 	if (err)
 		goto fail1;
-	printk(KERN_INFO DRIVER_DESC": serio_open succesful\n");
 
 	err = wacom_setup(wacom, serio);
 	if (err)
 		goto fail2;
-	printk(KERN_INFO DRIVER_DESC": wacom_setup succesful\n");
 
 	err = input_register_device(wacom->dev);
 	if (err)
 		goto fail2;
-	printk(KERN_INFO DRIVER_DESC": input_register_device succesful\n");
 
 	return 0;
 
@@ -590,16 +567,12 @@ static struct serio_driver wacom_drv = {
 
 static int __init wacom_init(void)
 {
-	printk(KERN_INFO DRIVER_DESC": loading\n");
 	return serio_register_driver(&wacom_drv);
-	printk(KERN_INFO DRIVER_DESC": loaded\n");
 }
 
 static void __exit wacom_exit(void)
 {
-	printk(KERN_INFO DRIVER_DESC": unloading\n");
 	serio_unregister_driver(&wacom_drv);
-	printk(KERN_INFO DRIVER_DESC": unloaded\n");
 }
 
 module_init(wacom_init);
