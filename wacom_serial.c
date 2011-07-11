@@ -185,6 +185,10 @@ static void handle_model_response(struct wacom *wacom)
 		 major_v, minor_v);
 	dev_dbg(&wacom->dev->dev, "Max pressure: %d.\n", max_z);
 	input_set_abs_params(wacom->dev, ABS_PRESSURE, 0, max_z, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_TILT_X,
+					-(TILT_BITS + 1), TILT_BITS, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_TILT_Y,
+					-(TILT_BITS + 1), TILT_BITS, 0, 0);
 }
 
 
@@ -281,6 +285,20 @@ static void handle_packet5(struct wacom *wacom)
 
 	data = wacom->data;
 
+#if 0
+	printk(KERN_INFO "raw: %x %x %x %x %x %x %x %x %x\n",
+			data[0],
+			data[1],
+			data[2],
+			data[3],
+			data[4],
+			data[5],
+			data[6],
+			data[7],
+			data[8]);
+#endif
+
+
 	if (data[0] & 1)
 		dev_info(&wacom->dev->dev,
 				"Received something from second channel. "
@@ -336,6 +354,11 @@ static void handle_packet5(struct wacom *wacom)
 		if (data[8] & TILT_SIGN_BIT)
 			tilty -= (TILT_BITS + 1);
 		in_proximity_p = (data[0] & PROXIMITY_BIT);
+
+#if 0
+		dev_info(&wacom->dev->dev,
+				"Tilt x: %d  y: %d\n", tiltx, tilty);
+#endif
 	}
 
 	else
@@ -354,6 +377,8 @@ static void handle_packet5(struct wacom *wacom)
 
 	input_report_abs(wacom->dev, ABS_X, x);
 	input_report_abs(wacom->dev, ABS_Y, y);
+	input_report_abs(wacom->dev, ABS_TILT_X, tiltx);
+	input_report_abs(wacom->dev, ABS_TILT_Y, tilty);
 	input_report_abs(wacom->dev, ABS_PRESSURE, z);
 	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
 			                             !stylus_p);
