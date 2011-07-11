@@ -276,28 +276,28 @@ static void handle_packet(struct wacom *wacom)
 	input_sync(wacom->dev);
 }
 
+static void send_position5(struct wacom *wacom) {
+	int x, y;
+	unsigned char *data = wacom->data;
+
+	x = ((data[1] & 0x7f) << 9) |
+	    ((data[2] & 0x7f) << 2) |
+	    ((data[3] & 0x60) >> 5);
+	y = ((data[3] & 0x1f) << 11) |
+	    ((data[4] & 0x7f) <<  4) |
+	    ((data[5] & 0x78) >>  3);
+	input_report_abs(wacom->dev, ABS_X, x);
+	input_report_abs(wacom->dev, ABS_Y, y);
+}
+
 static void handle_packet5(struct wacom *wacom)
 {
-	int in_proximity_p, buttons, abswheel, x, y, z, tiltx, tilty;
-	int device_id;
-	static int device; //TODO need this? better way?
+	int proximity, buttons, abswheel, relwheel, rotation, throttle;
+	int z, tiltx, tilty;
+	static int device_id, device;
+	static int discard_first = 0;
 
-	unsigned char *data;
-
-	data = wacom->data;
-
-#if 0
-	printk(KERN_INFO "raw: %x %x %x %x %x %x %x %x %x\n",
-			data[0],
-			data[1],
-			data[2],
-			data[3],
-			data[4],
-			data[5],
-			data[6],
-			data[7],
-			data[8]);
-#endif
+	unsigned char *data = wacom->data;
 
 
 	if (data[0] & 1)
@@ -307,7 +307,7 @@ static void handle_packet5(struct wacom *wacom)
 
 	/* Device ID packet */
 	if ((data[0] & 0xfc) == 0xc0) {
-		in_proximity_p = 1;
+		proximity = 1;
 
 		device_id = ((data[1] & 0x7f) << 5) | ((data[2] & 0x7c) >> 2);
 		
@@ -316,14 +316,18 @@ static void handle_packet5(struct wacom *wacom)
 						   ERASER_DEVICE_ID);
 
 		input_report_key(wacom->dev, ABS_MISC, device);
-
-		//TODO check for discard_first ?
+		
+		//discard_first = (device_id & 0xf06) != 0x802;
+		/* TODO: I don't really know why this was there in the old 
+		 * code -- doesn't seem to work with my intuos mouse 
+		 * (whenever the mouse sends its ID, this will stay 1, but 
+		 * my mouse only s ends packets of the first kind) */
 	}
 
 	/* Out of proximity packet */
 	else if ((data[0] & 0xfe) == 0x80)
 	{
-		in_proximity_p = 0;
+		proximity = 0;
 	}
 
 	/* General pen packet or eraser packet or airbrush first packet
@@ -331,12 +335,8 @@ static void handle_packet5(struct wacom *wacom)
 	else if (((data[0] & 0xb8) == 0xa0) ||
 			((data[0] & 0xbe) == 0xb4))
 	{
-		x = (((data[1] & 0x7f) << 9) |
-				((data[2] & 0x7f) << 2) |
-				((data[3] & 0x60) >> 5));
-		y = (((data[3] & 0x1f) << 11) |
-				((data[4] & 0x7f) << 4) |
-				((data[5] & 0x78) >> 3));
+		send_position5(wacom);
+
 		if ((data[0] & 0xb8) == 0xa0)
 		{
 			z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
@@ -354,30 +354,88 @@ static void handle_packet5(struct wacom *wacom)
 			tiltx -= (TILT_BITS + 1);
 		if (data[8] & TILT_SIGN_BIT)
 			tilty -= (TILT_BITS + 1);
-		in_proximity_p = (data[0] & PROXIMITY_BIT);
+		proximity = (data[0] & PROXIMITY_BIT);
 
-		input_report_abs(wacom->dev, ABS_X, x);
-		input_report_abs(wacom->dev, ABS_Y, y);
 		input_report_abs(wacom->dev, ABS_TILT_X, tiltx);
 		input_report_abs(wacom->dev, ABS_TILT_Y, tilty);
 		input_report_abs(wacom->dev, ABS_PRESSURE, z);
 	}
 
-	else
+	/* 4D mouse 1st packet or Lens cursor packet or 2D mouse packet*/
+	//largely UNTESTED
+	else if (((data[0] & 0xbe) == 0xa8) ||
+			((data[0] & 0xbe) == 0xb0))
+	{
+		if (!discard_first)
+			send_position5(wacom);
+
+		/* 4D mouse */
+		if (MOUSE_4D(device_id))
+		{
+			throttle = (((data[5] & 0x07) << 7) |
+				(data[6] & 0x7f));
+			if (data[8] & 0x08)
+				throttle = -throttle;
+			input_report_abs(wacom->dev, ABS_THROTTLE, throttle); //TODO range?
+		}
+
+		/* Lens cursor */
+		else if (LENS_CURSOR(device_id))
+		{
+			buttons = data[8]; //TODO what does each bit mean -> wich events to send?
+		}
+
+		/* 2D mouse */
+		else if (MOUSE_2D(device_id))
+		{
+			buttons = (data[8] & 0x1C) >> 2; //TODO same as above
+			relwheel = - (data[8] & 1) +
+					((data[8] & 2) >> 1);
+			input_report_rel(wacom->dev, REL_WHEEL, relwheel);
+				//TODO range(relative?)/resolution -- need to flag capabliity?
+		}
+
+		proximity = (data[0] & PROXIMITY_BIT);
+	} /* end 4D mouse 1st packet */
+
+	/* 4D mouse 2nd packet */
+	//UNTESTED
+	else if ((data[0] & 0xbe) == 0xaa)
+	{
+		send_position5(wacom);
+		rotation = (((data[6] & 0x0f) << 7) |
+			(data[7] & 0x7f));
+		if (rotation < 900)
+			rotation = -rotation;
+		else 
+			rotation = 1799 - rotation;
+
+		//TODO: send rotation
+
+		proximity = (data[0] & PROXIMITY_BIT);
+		discard_first = 0;
+	}
+
+	else {
 		dev_info(&wacom->dev->dev,
-				"Received unknown packet type!\n");
-	
+				"Received unknown protocol V packet type!\n");
+		return;
+	}
 
 
-	//TODO: remove redundancy
-	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
+	//TODO: remove redundancy if possible
+	if (!discard_first) {
+		input_report_key(wacom->dev, BTN_TOOL_MOUSE, proximity &&
 						device == CURSOR_DEVICE_ID);
-	input_report_key(wacom->dev, BTN_TOOL_RUBBER, in_proximity_p &&
+		input_report_key(wacom->dev, BTN_TOOL_RUBBER, proximity &&
 						device == ERASER_DEVICE_ID);
-	input_report_key(wacom->dev, BTN_TOOL_PEN, in_proximity_p &&
+		input_report_key(wacom->dev, BTN_TOOL_PEN, proximity &&
 						device == STYLUS_DEVICE_ID);
+	}
 
 
+	//TODO: are buttons compatible with what I'm getting from above? 
+	//Check with what old code does.
 	input_report_key(wacom->dev, BTN_TOUCH, buttons & 1);
 	input_report_key(wacom->dev, BTN_STYLUS, buttons & 2);
 	input_sync(wacom->dev);
