@@ -134,12 +134,11 @@ static void handle_model_response(struct wacom *wacom)
 		sscanf(p+1, "%u.%u", &major_v, &minor_v);
 
 	switch (wacom->data[2] << 8 | wacom->data[3]) {
-	case MODEL_INTUOS:	/* UNTESTED */
-	case MODEL_INTUOS2:
-		dev_info(&wacom->dev->dev, "Intuos tablets are not supported by"
-			 " this driver.\n");
+	case MODEL_INTUOS:
+	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
+		wacom->extra_z_bits = 3;
 		break;
 	case MODEL_CINTIQ:	/* UNTESTED */
 	case MODEL_CINTIQ2:
