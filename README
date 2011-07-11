@@ -1,0 +1,6 @@
+wacom_serial -- A driver for old serial Wacom tablets
+
+Initial code by julian (tokenrove), supporting protocol IV
+http://cipht.net/2011/07/02/wacom_serial-initial-release.html
+Also see: http://ubuntuforums.org/showthread.php?t=1780154
+
