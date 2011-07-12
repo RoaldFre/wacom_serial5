@@ -290,6 +290,44 @@ static void send_position5(struct wacom *wacom) {
 	input_report_abs(wacom->dev, ABS_Y, y);
 }
 
+#define REPORT_KEY(wacom, buttons, bit, code) (\
+		input_report_key((wacom)->dev, (code), \
+		((buttons) & (1 << (bit))) >> (bit)))
+static void send_buttons5(struct wacom *wacom, int buttons, int device) {
+	/* Reversed mappings of buttonmask to button codes.
+	 * Found in wcmUSB.c of xf86-input-wacom, commit 
+	 * df3c61392f82dac42a04aadc5ae79daff720d3c4 
+	 *
+	 * bit	event code
+	 * 0	BTN_LEFT
+	 * 1	BTN_STYLUS or BTN_MIDDLE
+	 * 2	BTN_STYLUS2 or BTN_RIGHT
+	 * 3	BTN_SIDE
+	 * 4	BTN_EXTRA
+	 * not too sure of these:
+	 * 5	BTN_FORWARD
+	 * 6	BTN_BACK
+	 * 7	BTN_TASK
+	 *
+	 * Note that we are doing "double" work here, as the wacom driver 
+	 * will make the reverse transformation.
+	 * We could probably in-line this so we only look at the relevant 
+	 * bits that aren't masked anyway, but that leads to a bit of code 
+	 * duplication. Let's hope the compiler is smart enough to do that 
+	 * automagically.
+	 */
+	REPORT_KEY(wacom, buttons, 0, BTN_LEFT);
+	REPORT_KEY(wacom, buttons, 1, (device == CURSOR_DEVICE_ID ?
+						BTN_MIDDLE : BTN_STYLUS));
+	REPORT_KEY(wacom, buttons, 2, (device == CURSOR_DEVICE_ID ?
+						BTN_RIGHT : BTN_STYLUS2));
+	REPORT_KEY(wacom, buttons, 3, BTN_SIDE);
+	REPORT_KEY(wacom, buttons, 4, BTN_EXTRA);
+	REPORT_KEY(wacom, buttons, 5, BTN_FORWARD);
+	REPORT_KEY(wacom, buttons, 6, BTN_BACK);
+	REPORT_KEY(wacom, buttons, 7, BTN_TASK);
+}
+
 static void handle_packet5(struct wacom *wacom)
 {
 	int proximity, buttons, abswheel, relwheel, rotation, throttle;
@@ -323,7 +361,7 @@ static void handle_packet5(struct wacom *wacom)
 		/* TODO: I don't really know why this was there in the old 
 		 * code -- doesn't seem to work with my intuos mouse 
 		 * (whenever the mouse sends its ID, this will stay 1, but 
-		 * my mouse only s ends packets of the first kind) */
+		 * my mouse only sends packets of the first kind) */
 	}
 
 	/* Out of proximity packet */
@@ -343,6 +381,7 @@ static void handle_packet5(struct wacom *wacom)
 		{
 			z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
 			buttons = (data[0] & 0x06);
+			send_buttons5(wacom, buttons, device);
 		}
 		else
 		{
@@ -384,13 +423,15 @@ static void handle_packet5(struct wacom *wacom)
 		/* Lens cursor */
 		else if (LENS_CURSOR(device_id))
 		{
-			buttons = data[8]; //TODO what does each bit mean -> wich events to send?
+			buttons = data[8];
+			send_buttons5(wacom, buttons, device);
 		}
 
 		/* 2D mouse */
 		else if (MOUSE_2D(device_id))
 		{
-			buttons = (data[8] & 0x1C) >> 2; //TODO same as above
+			buttons = (data[8] & 0x1C) >> 2;
+			send_buttons5(wacom, buttons, device);
 			relwheel = - (data[8] & 1) +
 					((data[8] & 2) >> 1);
 			input_report_rel(wacom->dev, REL_WHEEL, relwheel);
@@ -424,7 +465,6 @@ static void handle_packet5(struct wacom *wacom)
 		return;
 	}
 
-
 	//TODO: remove redundancy if possible
 	if (!discard_first) {
 		input_report_key(wacom->dev, BTN_TOOL_MOUSE, proximity &&
@@ -435,34 +475,18 @@ static void handle_packet5(struct wacom *wacom)
 						device == STYLUS_DEVICE_ID);
 	}
 
-
-	//TODO: are buttons compatible with what I'm getting from above? 
-	//Check with what old code does.
-	input_report_key(wacom->dev, BTN_TOUCH, buttons & 1);
-	input_report_key(wacom->dev, BTN_STYLUS, buttons & 2);
 	input_sync(wacom->dev);
-
-	/* Reversed mappings of buttonmask to button codes.
-	 * Found in wcmUSB.c of xf86-input-wacom, commit 
-	 * df3c61392f82dac42a04aadc5ae79daff720d3c4 
-	 *
-	 * bit	event code
-	 * 0	BTN_LEFT
-	 * 1	BTN_STYLUS or BTN_MIDDLE
-	 * 2	BTN_STYLUS2 or BTN_RIGHT
-	 * 3	BTN_SIDE
-	 * 4	BTN_EXTRA
-	 * not too sure of these:
-	 * 5	BTN_FORWARD
-	 * 7	BTN_BACK
-	 * 8	BTN_TASK
-	 */
 }
 
 static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
 				   unsigned int flags)
 {
 	struct wacom *wacom = serio_get_drvdata(serio);
+
+	if (wacom == NULL) {
+		printk(KERN_ERR DRIVER_DESC ": Something went VERY WRONG!\n");
+		return IRQ_HANDLED;
+	}
 
 	if (data & 0x80)
 		wacom->idx = 0;
@@ -614,12 +638,23 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->id.version = 0x0100;
 	input_dev->dev.parent = &serio->dev;
 
-	input_dev->evbit[0] = BIT_MASK(EV_KEY) | BIT_MASK(EV_ABS);
-	__set_bit(BTN_TOOL_PEN, input_dev->keybit);
-	__set_bit(BTN_TOOL_RUBBER, input_dev->keybit);
-	__set_bit(BTN_TOOL_MOUSE, input_dev->keybit);
-	__set_bit(BTN_TOUCH, input_dev->keybit);
-	__set_bit(BTN_STYLUS, input_dev->keybit);
+	input_dev->evbit[0] = BIT_MASK(EV_KEY)
+			    | BIT_MASK(EV_ABS)
+			    | BIT_MASK(EV_REL);
+	__set_bit(BTN_LEFT,		input_dev->keybit);
+	__set_bit(BTN_MIDDLE,		input_dev->keybit);
+	__set_bit(BTN_RIGHT,		input_dev->keybit);
+	__set_bit(BTN_SIDE,		input_dev->keybit);
+	__set_bit(BTN_EXTRA,		input_dev->keybit);
+	__set_bit(BTN_FORWARD,		input_dev->keybit);
+	__set_bit(BTN_BACK,		input_dev->keybit);
+	__set_bit(BTN_TASK,		input_dev->keybit);
+	__set_bit(BTN_STYLUS,		input_dev->keybit);
+	__set_bit(BTN_STYLUS2,		input_dev->keybit);
+	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
+	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
+	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
+	//__set_bit(BTN_TOUCH,		input_dev->keybit);
 
 	serio_set_drvdata(serio, wacom);
 
