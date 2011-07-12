@@ -138,6 +138,10 @@ static void handle_model_response(struct wacom *wacom)
 
 	switch (wacom->data[2] << 8 | wacom->data[3]) {
 	case MODEL_INTUOS:
+		//TODO: get config string somehow so we don't have to hardcode!
+		input_abs_set_res(wacom->dev, ABS_X, 2540);
+		input_abs_set_res(wacom->dev, ABS_Y, 2540);
+		/* fall through */
 	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
@@ -147,7 +151,6 @@ static void handle_model_response(struct wacom *wacom)
 			 * intuos1 have this too? Dependent on which tool 
 			 * you use? (mine doesn't... -- don't enable for 
 			 * intuos1?) */
-
 		break;
 	case MODEL_CINTIQ:	/* UNTESTED */
 	case MODEL_CINTIQ2:
