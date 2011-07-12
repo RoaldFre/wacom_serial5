@@ -137,7 +137,7 @@ static void handle_model_response(struct wacom *wacom)
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
 		wacom->extra_z_bits = 3;
-		input_set_abs_params(input_dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+		input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
 			/* TODO: what other models have throttle? Does 
 			 * intuos1 have this too? Dependent on which tool 
 			 * you use? (mine doesn't... -- don't enable for 
