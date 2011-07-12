@@ -1,18 +1,24 @@
 /*
- * Wacom protocol 4 serial tablet driver
+ * Wacom protocol 5 serial tablet driver
  *
- * To do:
- *  - support pad buttons;
- *  - support (protocol 4-style) tilt;
- *  - support suppress;
- *  - support Graphire relative wheel.
+ * This code is based on the Wacom protocol 4 serial tablet driver by 
+ * Julian Squires <julian@cipht.net>.
+ *
+ * Protocol 5 is implemented by Roald Frederickx 
+ * <roald.frederickx@gmail.com>.
+ * As of now, I can only test it myself on an old Wacom Intuos1 with stylus 
+ * and old 5-button mouse.
  *
  * Sections I have been unable to test personally due to lack of available
  * hardware are marked UNTESTED.  Much of what is marked UNTESTED comes from
- * reading the wcmSerial code in linuxwacom 0.9.0.
+ * old wcmSerial code in linuxwacom 0.9.0 or xf86-input-wacom at commit 
+ * df3c61392f82dac42a04aadc5ae79daff720d3c4 (last commit before removing 
+ * serial support).
  *
  * This driver was developed with reference to much code written by others,
  * particularly:
+ *  - wacom protocol 4 serial tablet driver by Julian Squires 
+ *    <julian@cipht.net>;
  *  - elo, gunze drivers by Vojtech Pavlik <vojtech@ucw.cz>;
  *  - wacom_w8001 driver by Jaya Kumar <jayakumar.lkml@gmail.com>;
  *  - the USB wacom input driver, credited to many people
@@ -20,8 +26,8 @@
  *  - new and old versions of linuxwacom / xf86-input-wacom credited to
  *    Frederic Lepied, France. <Lepied@XFree86.org> and
  *    Ping Cheng, Wacom. <pingc@wacom.com>;
- *  - and xf86wacom.c (a presumably ancient version of the linuxwacom code), by
- *    Frederic Lepied and Raph Levien <raph@gtk.org>.
+ *  - and xf86wacom.c (a presumably ancient version of the linuxwacom 
+ *    code), by Frederic Lepied and Raph Levien <raph@gtk.org>.
  */
 
 /* XXX To be removed before (widespread) release. */
@@ -42,9 +48,10 @@
 #define SERIO_WACOM_IV 0x3d
 #endif
 
-#define DRIVER_AUTHOR	"Julian Squires <julian@cipht.net>"
-#define DEVICE_NAME	"Wacom protocol 4 serial tablet"
+#define DRIVER_AUTHOR	"Roald Frederickx <roald.frederickx@gmail.com>"
+#define DEVICE_NAME	"Wacom protocol 5 serial tablet"
 #define DRIVER_DESC	DEVICE_NAME " driver"
+#define DRIVER_NAME	"wacom_serial5"
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
@@ -67,10 +74,10 @@ MODULE_LICENSE("GPL");
 #define COMMAND_ENABLE_PRESSURE_MODE		"PH1\r"
 #define COMMAND_Z_FILTER			"ZF1\r"
 
-/* Note that this is a protocol 4 packet without tilt information. */
-#define PACKET_LENGTH 9 //TODO: was originally 7 -- should also be 9 for protocol4 with tilt?
+#define PACKET_LENGTH 9
 
 /* device IDs from wacom_wac.h */
+//TODO: properly include this header!
 #define STYLUS_DEVICE_ID	0x02
 #define TOUCH_DEVICE_ID         0x03
 #define CURSOR_DEVICE_ID        0x06
@@ -80,8 +87,6 @@ MODULE_LICENSE("GPL");
 #define TILT_SIGN_BIT   0x40
 #define TILT_BITS       0x3F
 #define PROXIMITY_BIT   0x40
-
-
 
 
 #define PEN(id)         ((id & 0x07ff) == 0x0022 || \
@@ -246,43 +251,7 @@ static void handle_response(struct wacom *wacom)
 	complete(&wacom->cmd_done);
 }
 
-static void handle_packet(struct wacom *wacom)
-{
-	int in_proximity_p, stylus_p, button, x, y, z;
-	int device;
-
-	in_proximity_p = wacom->data[0] & 0x40;
-	stylus_p = wacom->data[0] & 0x20;
-	button = (wacom->data[3] & 0x78) >> 3;
-	x = (wacom->data[0] & 3) << 14 | wacom->data[1]<<7 | wacom->data[2];
-	y = (wacom->data[3] & 3) << 14 | wacom->data[4]<<7 | wacom->data[5];
-	z = wacom->data[6] & 0x7f;
-	if(wacom->extra_z_bits >= 1)
-		z = z << 1 | (wacom->data[3] & 0x4) >> 2;
-	if(wacom->extra_z_bits > 1)
-		z = z << 1 | (wacom->data[0] & 0x4);
-	z = z ^ (0x40 << wacom->extra_z_bits);
-
-	device = stylus_p ? STYLUS_DEVICE_ID : CURSOR_DEVICE_ID;
-	/* UNTESTED Graphire eraser (according to old wcmSerial code) */
-	if (button & 8)
-		device = ERASER_DEVICE_ID;
-	input_report_key(wacom->dev, ABS_MISC, device);
-	input_report_abs(wacom->dev, ABS_X, x);
-	input_report_abs(wacom->dev, ABS_Y, y);
-	input_report_abs(wacom->dev, ABS_PRESSURE, z);
-	input_report_key(wacom->dev, BTN_TOOL_MOUSE, in_proximity_p &&
-			                             !stylus_p);
-	input_report_key(wacom->dev, BTN_TOOL_RUBBER, in_proximity_p &&
-			                              stylus_p && button&4);
-	input_report_key(wacom->dev, BTN_TOOL_PEN, in_proximity_p && stylus_p &&
-                                                   !(button&4));
-	input_report_key(wacom->dev, BTN_TOUCH, button & 1);
-	input_report_key(wacom->dev, BTN_STYLUS, button & 2);
-	input_sync(wacom->dev);
-}
-
-static void send_position5(struct wacom *wacom) {
+static void send_position(struct wacom *wacom) {
 	int x, y;
 	unsigned char *data = wacom->data;
 
@@ -299,9 +268,9 @@ static void send_position5(struct wacom *wacom) {
 #define REPORT_KEY(wacom, buttons, bit, code) (\
 		input_report_key((wacom)->dev, (code), \
 		((buttons) & (1 << (bit))) >> (bit)))
-static void send_buttons5(struct wacom *wacom, int buttons, int device) {
+static void send_buttons(struct wacom *wacom, int buttons, int device) {
 	/* Reversed mappings of buttonmask to button codes.
-	 * Found in wcmUSB.c of xf86-input-wacom, commit 
+	 * Found in wcmUSB.c of xf86-input-wacom, tree as per commit 
 	 * df3c61392f82dac42a04aadc5ae79daff720d3c4 
 	 *
 	 * bit	event code
@@ -334,7 +303,7 @@ static void send_buttons5(struct wacom *wacom, int buttons, int device) {
 	REPORT_KEY(wacom, buttons, 7, BTN_TASK);
 }
 
-static void handle_packet5(struct wacom *wacom)
+static void handle_packet(struct wacom *wacom)
 {
 	int proximity, buttons, abswheel, relwheel, rotation, throttle;
 	int z, tiltx, tilty;
@@ -381,13 +350,13 @@ static void handle_packet5(struct wacom *wacom)
 	else if (((data[0] & 0xb8) == 0xa0) ||
 			((data[0] & 0xbe) == 0xb4))
 	{
-		send_position5(wacom);
+		send_position(wacom);
 
 		if ((data[0] & 0xb8) == 0xa0)
 		{
 			z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
 			buttons = (data[0] & 0x06);
-			send_buttons5(wacom, buttons, device);
+			send_buttons(wacom, buttons, device);
 		}
 		else
 		{
@@ -414,7 +383,7 @@ static void handle_packet5(struct wacom *wacom)
 			((data[0] & 0xbe) == 0xb0))
 	{
 		if (!discard_first)
-			send_position5(wacom);
+			send_position(wacom);
 
 		/* 4D mouse */
 		if (MOUSE_4D(device_id))
@@ -430,14 +399,14 @@ static void handle_packet5(struct wacom *wacom)
 		else if (LENS_CURSOR(device_id))
 		{
 			buttons = data[8];
-			send_buttons5(wacom, buttons, device);
+			send_buttons(wacom, buttons, device);
 		}
 
 		/* 2D mouse */
 		else if (MOUSE_2D(device_id))
 		{
 			buttons = (data[8] & 0x1C) >> 2;
-			send_buttons5(wacom, buttons, device);
+			send_buttons(wacom, buttons, device);
 			relwheel = - (data[8] & 1) +
 					((data[8] & 2) >> 1);
 			input_report_rel(wacom->dev, REL_WHEEL, relwheel);
@@ -451,7 +420,7 @@ static void handle_packet5(struct wacom *wacom)
 	//UNTESTED
 	else if ((data[0] & 0xbe) == 0xaa)
 	{
-		send_position5(wacom);
+		send_position(wacom);
 		rotation = (((data[6] & 0x0f) << 7) |
 			(data[7] & 0x7f));
 		if (rotation < 900)
@@ -490,7 +459,7 @@ static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
 	struct wacom *wacom = serio_get_drvdata(serio);
 
 	if (wacom == NULL) {
-		printk(KERN_ERR DRIVER_DESC ": Something went VERY WRONG!\n");
+		printk(KERN_ERR DRIVER_NAME ": Something went VERY WRONG!\n");
 		return IRQ_HANDLED;
 	}
 
@@ -508,8 +477,7 @@ static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
 	 * response string, or a seven-byte packet with the MSB set on
 	 * the first byte */
 	if (wacom->idx == PACKET_LENGTH && (wacom->data[0] & 0x80)) {
-		//handle_packet(wacom);
-		handle_packet5(wacom);
+		handle_packet(wacom);
 		wacom->idx = 0;
 	} else if (data == '\r' && !(wacom->data[0] & 0x80)) {
 		wacom->data[wacom->idx-1] = 0;
@@ -699,7 +667,7 @@ MODULE_DEVICE_TABLE(serio, wacom_serio_ids);
 
 static struct serio_driver wacom_drv = {
 	.driver		= {
-		.name	= "wacom_serial",
+		.name	= DRIVER_NAME,
 	},
 	.description	= DRIVER_DESC,
 	.id_table	= wacom_serio_ids,
