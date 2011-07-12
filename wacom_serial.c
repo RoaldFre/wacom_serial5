@@ -64,7 +64,9 @@ MODULE_LICENSE("GPL");
 
 #define COMMAND_START_SENDING_PACKETS		"ST\r"
 #define COMMAND_STOP_SENDING_PACKETS		"SP\r"
-#define COMMAND_MULTI_MODE_INPUT		"MU1\r"
+#define COMMAND_SINGLE_MODE_INPUT		"MT0\r"
+#define COMMAND_MULTI_MODE_INPUT		"MT1\r" /* MU1 for protocol4 */
+
 #define COMMAND_ORIGIN_IN_UPPER_LEFT		"OC1\r"
 #define COMMAND_ENABLE_ALL_MACRO_BUTTONS	"~M0\r"
 #define COMMAND_DISABLE_GROUP_1_MACRO_BUTTONS	"~M1\r"
@@ -73,6 +75,9 @@ MODULE_LICENSE("GPL");
 #define COMMAND_ENABLE_CONTINUOUS_MODE		"SR\r"
 #define COMMAND_ENABLE_PRESSURE_MODE		"PH1\r"
 #define COMMAND_Z_FILTER			"ZF1\r"
+
+#define COMMAND_HEIGHT				"HT1\r"
+#define COMMAND_ID				"ID1\r"
 
 #define PACKET_LENGTH 9
 
@@ -510,6 +515,7 @@ static int wacom_send(struct serio *serio, const char *command)
 
 static int send_setup_string(struct wacom *wacom, struct serio *serio)
 {
+	//TODO: clean this up for protocol 5 only
 	const char *s;
 	switch (wacom->dev->id.version) {
 	case MODEL_CINTIQ:	/* UNTESTED */
@@ -522,8 +528,15 @@ static int send_setup_string(struct wacom *wacom, struct serio *serio)
 		s = COMMAND_ENABLE_PRESSURE_MODE
 			COMMAND_START_SENDING_PACKETS;
 		break;
+	case MODEL_INTUOS:
+	case MODEL_INTUOS2: /* UNTESTED, but should be the same */
+		s = COMMAND_MULTI_MODE_INPUT
+			COMMAND_ID
+			COMMAND_TRANSMIT_AT_MAX_RATE
+			COMMAND_START_SENDING_PACKETS;
 	default:
 		s = COMMAND_MULTI_MODE_INPUT
+			COMMAND_ID
 			COMMAND_ORIGIN_IN_UPPER_LEFT
 			COMMAND_ENABLE_ALL_MACRO_BUTTONS
 			COMMAND_DISABLE_GROUP_1_MACRO_BUTTONS
