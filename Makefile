@@ -1,4 +1,4 @@
-obj-m += wacom_serial.o
+obj-m += wacom_serial5.o
 
 all:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) modules
@@ -11,9 +11,9 @@ debug:
 
 ins:
 	sync
-	sudo insmod wacom_serial.ko
+	sudo insmod wacom_serial5.ko
 	sync
 rm:
 	sync
-	sudo rmmod wacom_serial
+	sudo rmmod wacom_serial5
 	sync

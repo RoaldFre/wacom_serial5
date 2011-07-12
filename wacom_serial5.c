@@ -111,7 +111,6 @@ MODULE_LICENSE("GPL");
 struct wacom {
 	struct input_dev *dev;
 	struct completion cmd_done;
-	int extra_z_bits;
 	int idx;
 	unsigned char data[32];
 	char phys[32];
@@ -119,14 +118,9 @@ struct wacom {
 
 
 enum {
-	MODEL_CINTIQ		= 0x504C, /* PL */
-	MODEL_CINTIQ2		= 0x4454, /* DT */
-	MODEL_DIGITIZER_II	= 0x5544, /* UD */
-	MODEL_GRAPHIRE		= 0x4554, /* ET */
 	MODEL_INTUOS		= 0x4744, /* GD */
 	MODEL_INTUOS2		= 0x5844, /* XD */
-	MODEL_PENPARTNER	= 0x4354, /* CT */
-	MODEL_UNKNOWN		= 0
+	MODEL_UNKNOWN           = 0
 };
 
 static void handle_model_response(struct wacom *wacom)
@@ -150,56 +144,22 @@ static void handle_model_response(struct wacom *wacom)
 	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
-		wacom->extra_z_bits = 3;
 		input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
 			/* TODO: what other models have throttle? Does 
 			 * intuos1 have this too? Dependent on which tool 
 			 * you use? (mine doesn't... -- don't enable for 
 			 * intuos1?) */
 		break;
-	case MODEL_CINTIQ:	/* UNTESTED */
-	case MODEL_CINTIQ2:
-		p = "Cintiq";
-		wacom->dev->id.version = MODEL_CINTIQ;
-		switch (wacom->data[5]<<8 | wacom->data[6]) {
-		case 0x3731: /* PL-710 */
-			/* wcmSerial sets res to 2540x2540 in this case. */
-			/* fall through */
-		case 0x3535: /* PL-550 */
-		case 0x3830: /* PL-800 */
-			wacom->extra_z_bits = 2;
-		}
-		break;
-	case MODEL_PENPARTNER:	/* UNTESTED */
-		p = "Penpartner";
-		wacom->dev->id.version = MODEL_PENPARTNER;
-		/* wcmSerial sets res 1000x1000 in this case. */
-		break;
-	case MODEL_GRAPHIRE:	/* UNTESTED */
-		p = "Graphire";
-		wacom->dev->id.version = MODEL_GRAPHIRE;
-		/* UNTESTED: Apparently Graphire models do not answer coordinate
-		   requests; see also wacom_setup(). */
-		input_set_abs_params(wacom->dev, ABS_X, 0, 5103, 0, 0);
-		input_set_abs_params(wacom->dev, ABS_Y, 0, 3711, 0, 0);
-		input_abs_set_res(wacom->dev, ABS_X, 1016);
-		input_abs_set_res(wacom->dev, ABS_Y, 1016);
-		wacom->extra_z_bits = 2;
-		break;
-	case MODEL_DIGITIZER_II:
-		p = "Digitizer II";
-		wacom->dev->id.version = MODEL_DIGITIZER_II;
-		if (major_v == 1 && minor_v <= 2)
-			wacom->extra_z_bits = 0; /* UNTESTED */
-		break;
 	default:		/* UNTESTED */
 		dev_dbg(&wacom->dev->dev, "Didn't understand Wacom model "
-			                  "string: %s\n", wacom->data);
-		p = "Unknown Protocol IV";
+				"string: \"%s\". Maybe you want the "
+				"protocol IV driver instead of this one?\n",
+				wacom->data);
+		p = "Unknown Protocol V";
 		wacom->dev->id.version = MODEL_UNKNOWN;
 		break;
 	}
-	max_z = (1<<(7+wacom->extra_z_bits))-1;
+	max_z = (1<<(10))-1; //TODO: define constant
 	dev_info(&wacom->dev->dev, "Wacom tablet: %s, version %u.%u\n", p,
 		 major_v, minor_v);
 	dev_dbg(&wacom->dev->dev, "Max pressure: %d.\n", max_z);
@@ -515,19 +475,8 @@ static int wacom_send(struct serio *serio, const char *command)
 
 static int send_setup_string(struct wacom *wacom, struct serio *serio)
 {
-	//TODO: clean this up for protocol 5 only
 	const char *s;
 	switch (wacom->dev->id.version) {
-	case MODEL_CINTIQ:	/* UNTESTED */
-		s = COMMAND_ORIGIN_IN_UPPER_LEFT
-			COMMAND_TRANSMIT_AT_MAX_RATE
-			COMMAND_ENABLE_CONTINUOUS_MODE
-			COMMAND_START_SENDING_PACKETS;
-		break;
-	case MODEL_PENPARTNER:	/* UNTESTED */
-		s = COMMAND_ENABLE_PRESSURE_MODE
-			COMMAND_START_SENDING_PACKETS;
-		break;
 	case MODEL_INTUOS:
 	case MODEL_INTUOS2: /* UNTESTED, but should be the same */
 		s = COMMAND_MULTI_MODE_INPUT
@@ -535,6 +484,8 @@ static int send_setup_string(struct wacom *wacom, struct serio *serio)
 			COMMAND_TRANSMIT_AT_MAX_RATE
 			COMMAND_START_SENDING_PACKETS;
 	default:
+		/* TODO: remove this all together? All protocol5 tablets 
+		 * seem to use the string above.*/
 		s = COMMAND_MULTI_MODE_INPUT
 			COMMAND_ID
 			COMMAND_ORIGIN_IN_UPPER_LEFT
@@ -577,7 +528,9 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 	init_completion(&wacom->cmd_done);
 
 	/* My Intuos tablet won't respond to a configuration request, so it 
-	 * seems */
+	 * seems
+	 * TODO: Intuos2 does work? Or remove alltogether (seems to be 
+	 * removed altogether in older code) */
 	if (wacom->dev->id.version != MODEL_INTUOS) {
 		err = wacom_send(serio, REQUEST_CONFIGURATION_STRING);
 		if (err)
@@ -592,15 +545,11 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 		}
 	}
 
-	/* UNTESTED: Apparently Graphire models do not answer coordinate
-	   requests. */
-	if (wacom->dev->id.version != MODEL_GRAPHIRE) {
-		init_completion(&wacom->cmd_done);
-		err = wacom_send(serio, REQUEST_MAX_COORDINATES);
-		if (err)
-			return err;
-		wait_for_completion_timeout(&wacom->cmd_done, HZ);
-	}
+	init_completion(&wacom->cmd_done);
+	err = wacom_send(serio, REQUEST_MAX_COORDINATES);
+	if (err)
+		return err;
+	wait_for_completion_timeout(&wacom->cmd_done, HZ);
 
 	return send_setup_string(wacom, serio);
 }
@@ -617,7 +566,6 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail0;
 
 	wacom->dev = input_dev;
-	wacom->extra_z_bits = 1;
 	snprintf(wacom->phys, sizeof(wacom->phys), "%s/input0", serio->phys);
 
 	input_dev->name = DEVICE_NAME;
@@ -644,7 +592,6 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
 	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
 	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
-	//__set_bit(BTN_TOUCH,		input_dev->keybit);
 
 	serio_set_drvdata(serio, wacom);
 
@@ -683,7 +630,7 @@ MODULE_DEVICE_TABLE(serio, wacom_serio_ids);
 
 static struct serio_driver wacom_drv = {
 	.driver		= {
-		.name	= DRIVER_NAME,
+		.name 	= DRIVER_NAME,
 	},
 	.description	= DRIVER_DESC,
 	.id_table	= wacom_serio_ids,
