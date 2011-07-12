@@ -137,6 +137,12 @@ static void handle_model_response(struct wacom *wacom)
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
 		wacom->extra_z_bits = 3;
+		input_set_abs_params(input_dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+			/* TODO: what other models have throttle? Does 
+			 * intuos1 have this too? Dependent on which tool 
+			 * you use? (mine doesn't... -- don't enable for 
+			 * intuos1?) */
+
 		break;
 	case MODEL_CINTIQ:	/* UNTESTED */
 	case MODEL_CINTIQ2:
@@ -417,7 +423,7 @@ static void handle_packet5(struct wacom *wacom)
 				(data[6] & 0x7f));
 			if (data[8] & 0x08)
 				throttle = -throttle;
-			input_report_abs(wacom->dev, ABS_THROTTLE, throttle); //TODO range?
+			input_report_abs(wacom->dev, ABS_THROTTLE, throttle);
 		}
 
 		/* Lens cursor */
