@@ -6,11 +6,14 @@ all:
 clean:
 	make -C /lib/modules/$(shell uname -r)/build M=$(shell pwd) clean
 
+debug:
+	make -C /lib/modules/$(shell uname -r)/build KBUILD_CFLAGS+="-g -O0" M=$(shell pwd)  modules
+
 ins:
 	sync
-	insmod wacom_serial.ko
+	sudo insmod wacom_serial.ko
 	sync
 rm:
 	sync
-	rmmod wacom_serial
+	sudo rmmod wacom_serial
 	sync
