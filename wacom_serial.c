@@ -301,6 +301,8 @@ static void handle_packet5(struct wacom *wacom)
 
 
 	if (data[0] & 1)
+		/* Channels can be implemented by sending serial numbers to 
+		 * wacom driver? */
 		dev_info(&wacom->dev->dev,
 				"Received something from second channel. "
 				"Not implemented yet -> Dropped!\n");
@@ -439,6 +441,22 @@ static void handle_packet5(struct wacom *wacom)
 	input_report_key(wacom->dev, BTN_TOUCH, buttons & 1);
 	input_report_key(wacom->dev, BTN_STYLUS, buttons & 2);
 	input_sync(wacom->dev);
+
+	/* Reversed mappings of buttonmask to button codes.
+	 * Found in wcmUSB.c of xf86-input-wacom, commit 
+	 * df3c61392f82dac42a04aadc5ae79daff720d3c4 
+	 *
+	 * bit	event code
+	 * 0	BTN_LEFT
+	 * 1	BTN_STYLUS or BTN_MIDDLE
+	 * 2	BTN_STYLUS2 or BTN_RIGHT
+	 * 3	BTN_SIDE
+	 * 4	BTN_EXTRA
+	 * not too sure of these:
+	 * 5	BTN_FORWARD
+	 * 7	BTN_BACK
+	 * 8	BTN_TASK
+	 */
 }
 
 static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
