@@ -81,6 +81,8 @@ MODULE_LICENSE("GPL");
 
 #define PACKET_LENGTH 9
 
+#define MAX_Z ((1 << 10) - 1)
+
 /* device IDs from wacom_wac.h */
 //TODO: properly include this header!
 #define STYLUS_DEVICE_ID	0x02
@@ -125,7 +127,7 @@ enum {
 
 static void handle_model_response(struct wacom *wacom)
 {
-	int major_v, minor_v, max_z;
+	int major_v, minor_v;
 	char *p;
 
 	dev_dbg(&wacom->dev->dev, "Model string: %s\n", wacom->data);
@@ -137,13 +139,16 @@ static void handle_model_response(struct wacom *wacom)
 
 	switch (wacom->data[2] << 8 | wacom->data[3]) {
 	case MODEL_INTUOS:
-		//TODO: get config string somehow so we don't have to hardcode!
-		input_abs_set_res(wacom->dev, ABS_X, 2540);
-		input_abs_set_res(wacom->dev, ABS_Y, 2540);
-		/* fall through */
-	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
+		input_abs_set_res(wacom->dev, ABS_X, 2540);
+		input_abs_set_res(wacom->dev, ABS_Y, 2540);
+		break;
+	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
+		p = "Intuos2";
+		wacom->dev->id.version = MODEL_INTUOS2;
+		input_abs_set_res(wacom->dev, ABS_X, 2540);
+		input_abs_set_res(wacom->dev, ABS_Y, 2540);
 		input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
 			/* TODO: what other models have throttle? Does 
 			 * intuos1 have this too? Dependent on which tool 
@@ -159,11 +164,9 @@ static void handle_model_response(struct wacom *wacom)
 		wacom->dev->id.version = MODEL_UNKNOWN;
 		break;
 	}
-	max_z = (1<<(10))-1; //TODO: define constant
 	dev_info(&wacom->dev->dev, "Wacom tablet: %s, version %u.%u\n", p,
 		 major_v, minor_v);
-	dev_dbg(&wacom->dev->dev, "Max pressure: %d.\n", max_z);
-	input_set_abs_params(wacom->dev, ABS_PRESSURE, 0, max_z, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_PRESSURE, 0, MAX_Z, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_TILT_X,
 					-(TILT_BITS + 1), TILT_BITS, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_TILT_Y,
@@ -592,6 +595,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
 	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
 	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
+	//__set_bit(BTN_TOOL_LENS,	input_dev->keybit);
 
 	serio_set_drvdata(serio, wacom);
 
