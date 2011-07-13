@@ -11,9 +11,12 @@
  *
  * Sections I have been unable to test personally due to lack of available
  * hardware are marked UNTESTED.  Much of what is marked UNTESTED comes from
- * old wcmSerial code in linuxwacom 0.9.0 or xf86-input-wacom at commit 
- * df3c61392f82dac42a04aadc5ae79daff720d3c4 (last commit before removing 
- * serial support).
+ * old wcmSerial code in linuxwacom 0.9.0 or xf86-input-wacom.
+ *  - The last tree of xf86-input-wacom that still has the serial code:
+ *    f0c8aa9962e0238557d103baa4a5ba57484fd1c9
+ *  - The commit that removed serial support:
+ *    b3cba4e3543a98103282ba8fa55bf38012d23d9f
+ *
  *
  * This driver was developed with reference to much code written by others,
  * particularly:
@@ -83,32 +86,21 @@ MODULE_LICENSE("GPL");
 
 #define MAX_Z ((1 << 10) - 1)
 
-/* device IDs from wacom_wac.h */
-//TODO: properly include this header!
-#define STYLUS_DEVICE_ID	0x02
-#define TOUCH_DEVICE_ID         0x03
-#define CURSOR_DEVICE_ID        0x06
-#define ERASER_DEVICE_ID        0x0A
-#define PAD_DEVICE_ID           0x0F
-
 #define TILT_SIGN_BIT   0x40
 #define TILT_BITS       0x3F
 #define PROXIMITY_BIT   0x40
 
-
-#define PEN(id)         ((id & 0x07ff) == 0x0022 || \
-                         (id & 0x07ff) == 0x0042 || \
-                         (id & 0x07ff) == 0x0052)
-#define STROKING_PEN(id) ((id & 0x07ff) == 0x0032)
-#define AIRBRUSH(id)     ((id & 0x07ff) == 0x0112)
+//TODO: find better way
 #define MOUSE_4D(id)     ((id & 0x07ff) == 0x0094)
 #define MOUSE_2D(id)     ((id & 0x07ff) == 0x0007)
 #define LENS_CURSOR(id)  ((id & 0x07ff) == 0x0096)
-#define INKING_PEN(id)   ((id & 0x07ff) == 0x0012)
-#define STYLUS_TOOL(id)  (PEN(id) || STROKING_PEN(id) || INKING_PEN(id) || \
-                         AIRBRUSH(id))
-#define CURSOR_TOOL(id)  (MOUSE_4D(id) || LENS_CURSOR(id) || MOUSE_2D(id))
 
+struct tool_state {
+	int tool;		/* BTN_TOOL_XXX */
+	int device_id;		/* tool device ID as received by hardware */
+	__u32 serial_num;	/* tool serial# as received by hardware */
+	int proximity;
+};
 
 struct wacom {
 	struct input_dev *dev;
@@ -116,13 +108,18 @@ struct wacom {
 	int idx;
 	unsigned char data[32];
 	char phys[32];
+	struct tool_state tool_state[2]; /* state per channel */
 };
-
 
 enum {
 	MODEL_INTUOS		= 0x4744, /* GD */
 	MODEL_INTUOS2		= 0x5844, /* XD */
 	MODEL_UNKNOWN           = 0
+};
+
+enum {
+	TYPE_STYLUS,
+	TYPE_CURSOR
 };
 
 static void handle_model_response(struct wacom *wacom)
@@ -222,27 +219,29 @@ static void handle_response(struct wacom *wacom)
 	complete(&wacom->cmd_done);
 }
 
-static void send_position(struct wacom *wacom) {
+static void send_position(struct input_dev *dev, char *data) {
 	int x, y;
-	unsigned char *data = wacom->data;
-
 	x = ((data[1] & 0x7f) << 9) |
 	    ((data[2] & 0x7f) << 2) |
 	    ((data[3] & 0x60) >> 5);
 	y = ((data[3] & 0x1f) << 11) |
 	    ((data[4] & 0x7f) <<  4) |
 	    ((data[5] & 0x78) >>  3);
-	input_report_abs(wacom->dev, ABS_X, x);
-	input_report_abs(wacom->dev, ABS_Y, y);
+	input_report_abs(dev, ABS_X, x);
+	input_report_abs(dev, ABS_Y, y);
 }
 
-#define REPORT_KEY(wacom, buttons, bit, code) (\
-		input_report_key((wacom)->dev, (code), \
-		((buttons) & (1 << (bit))) >> (bit)))
-static void send_buttons(struct wacom *wacom, int buttons, int device) {
+static void report_key(struct input_dev *dev, int buttons, int bit, int code) {
+	input_report_key(dev, code, (buttons & (1 << bit)) >> bit);
+}
+
+static void send_buttons(struct input_dev *dev, int buttons, int tool_type) {
 	/* Reversed mappings of buttonmask to button codes.
-	 * Found in wcmUSB.c of xf86-input-wacom, tree as per commit 
-	 * df3c61392f82dac42a04aadc5ae79daff720d3c4 
+	 * Found in wcmUSB.c of xf86-input-wacom, 
+	 * tree: f0c8aa9962e0238557d103baa4a5ba57484fd1c9
+	 * 
+	 * commit 
+	 * b3cba4e3543a98103282ba8fa55bf38012d23d9f
 	 *
 	 * bit	event code
 	 * 0	BTN_LEFT
@@ -262,166 +261,255 @@ static void send_buttons(struct wacom *wacom, int buttons, int device) {
 	 * duplication. Let's hope the compiler is smart enough to do that 
 	 * automagically.
 	 */
-	REPORT_KEY(wacom, buttons, 0, BTN_LEFT);
-	REPORT_KEY(wacom, buttons, 1, (device == CURSOR_DEVICE_ID ?
-						BTN_MIDDLE : BTN_STYLUS));
-	REPORT_KEY(wacom, buttons, 2, (device == CURSOR_DEVICE_ID ?
-						BTN_RIGHT : BTN_STYLUS2));
-	REPORT_KEY(wacom, buttons, 3, BTN_SIDE);
-	REPORT_KEY(wacom, buttons, 4, BTN_EXTRA);
-	REPORT_KEY(wacom, buttons, 5, BTN_FORWARD);
-	REPORT_KEY(wacom, buttons, 6, BTN_BACK);
-	REPORT_KEY(wacom, buttons, 7, BTN_TASK);
+	report_key(dev, buttons, 0, BTN_LEFT);
+	report_key(dev, buttons, 1, (tool_type == TYPE_STYLUS ?
+					BTN_STYLUS : BTN_MIDDLE));
+	report_key(dev, buttons, 2, (tool_type == TYPE_STYLUS ?
+					BTN_STYLUS2 : BTN_RIGHT));
+	report_key(dev, buttons, 3, BTN_SIDE);
+	report_key(dev, buttons, 4, BTN_EXTRA);
+	report_key(dev, buttons, 5, BTN_FORWARD);
+	report_key(dev, buttons, 6, BTN_BACK);
+	report_key(dev, buttons, 7, BTN_TASK);
+}
+
+static int tool_from_device_id(int device_id)
+{
+	/* The original old serial code masked the MSB from device_id 
+	 * (mask: 0x7ff). New code does not seem to do this. We don't 
+	 * either.
+	 * Code ripped from wacom_wac.c from the kernel and pruned for 
+	 * Intuos and Intuos2 compatible tools only.  */
+	switch (device_id) {
+	case 0x812: /* Inking pen */
+	case 0x012:
+		return BTN_TOOL_PENCIL;
+
+	case 0x822: /* Pen */
+	case 0x842:
+	case 0x852:
+	case 0x022:
+		return BTN_TOOL_PEN;
+
+	case 0x832: /* Stroke pen */
+	case 0x032:
+		return BTN_TOOL_BRUSH;
+
+	case 0x007: /* Mouse 2D */
+	case 0x094: /* Mouse 4D */
+	case 0x09c: /* Not in old code -- not compatbile? */
+		return BTN_TOOL_MOUSE;
+
+	case 0x096: /* Lens cursor */
+		return BTN_TOOL_LENS;
+
+	case 0x82a: /* Eraser */
+	case 0x85a:
+	case 0x91a:
+	case 0xd1a:
+	case 0x0fa:
+		return BTN_TOOL_RUBBER;
+
+	case 0xd12:
+	case 0x912:
+	case 0x112:
+		return BTN_TOOL_AIRBRUSH;
+
+	default: /* Unknown tool */
+		return BTN_TOOL_PEN;
+	}
+}
+
+static void out_of_proximity_reset(struct input_dev *dev,
+						struct tool_state *state)
+{
+	/* Reset everything, otherwise we lose the initial states
+	 * when in-prox next time */
+	input_report_abs(dev, ABS_X, 0);
+	input_report_abs(dev, ABS_Y, 0);
+	input_report_abs(dev, ABS_DISTANCE, 0);
+	input_report_abs(dev, ABS_TILT_X, 0);
+	input_report_abs(dev, ABS_TILT_Y, 0);
+	if (state->tool >= BTN_TOOL_MOUSE) { //XXX not so nice...
+		input_report_key(dev, BTN_LEFT, 0);
+		input_report_key(dev, BTN_MIDDLE, 0);
+		input_report_key(dev, BTN_RIGHT, 0);
+		input_report_key(dev, BTN_SIDE, 0);
+		input_report_key(dev, BTN_EXTRA, 0);
+		input_report_abs(dev, ABS_THROTTLE, 0);
+		//input_report_abs(dev, ABS_RZ, 0);
+	} else {
+		input_report_abs(dev, ABS_PRESSURE, 0);
+		input_report_key(dev, BTN_STYLUS, 0);
+		input_report_key(dev, BTN_STYLUS2, 0);
+		//input_report_key(dev, BTN_TOUCH, 0);
+		input_report_abs(dev, ABS_WHEEL, 0);
+	}
+	input_report_key(dev, state->tool, 0);
+}
+
+static void handle_general_stylus_packet(struct input_dev *dev,
+					char *data, struct tool_state *state)
+{
+	int z, buttons, abswheel, tiltx, tilty;
+
+	state->proximity = (data[0] & PROXIMITY_BIT);
+	if (!state->proximity) {
+		out_of_proximity_reset(dev, state);
+		return;
+	}
+
+	send_position(dev, data);
+
+	if ((data[0] & 0xb8) == 0xa0) {
+		z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
+		input_report_abs(dev, ABS_PRESSURE, z);
+
+		buttons = (data[0] & 0x06);
+		send_buttons(dev, buttons, TYPE_STYLUS);
+	}
+	else {
+		abswheel = (((data[5] & 0x07) << 7) |
+			(data[6] & 0x7f));
+		//TODO: report wheel
+	}
+
+	tiltx = (data[7] & TILT_BITS);
+	tilty = (data[8] & TILT_BITS);
+	if (data[7] & TILT_SIGN_BIT)
+		tiltx -= (TILT_BITS + 1);
+	if (data[8] & TILT_SIGN_BIT)
+		tilty -= (TILT_BITS + 1);
+
+	input_report_abs(dev, ABS_TILT_X, tiltx);
+	input_report_abs(dev, ABS_TILT_Y, tilty);
+}
+
+static void handle_device_id_packet(char *data, struct tool_state *state)
+{
+	state->proximity = 1;
+	state->device_id = ((data[1] & 0x7f) << 5) | 
+			((data[2] & 0x7c) >> 2);
+	
+	state->serial_num = ((data[2] & 0x03) << 30) |
+			((data[3] & 0x7f) << 23) |
+			((data[4] & 0x7f) << 16) |
+			((data[5] & 0x7f) <<  9) |
+			((data[6] & 0x7f) <<  2) |
+			((data[7] & 0x60) >>  5);
+
+	state->tool = tool_from_device_id(state->device_id);
+	
+	//discard_first = (device_id & 0xf06) != 0x802;
+	/* TODO: I don't really know why this was there in the old 
+	 * code -- doesn't seem to work with my intuos lens mouse 
+	 * (whenever the mouse sends its ID, this will stay 1, but 
+	 * my mouse only sends packets of the first kind)
+	 * -- removed it from rest of code when implementing channels
+	 *    re-implement if necessary per channel*/
+}
+
+static void handle_first_cursor_packet(struct input_dev *dev, 
+					char *data, struct tool_state *state)
+{
+	int throttle, buttons, relwheel;
+
+	state->proximity = (data[0] & PROXIMITY_BIT);
+	if (!state->proximity) {
+		out_of_proximity_reset(dev, state);
+		return;
+	}
+
+	send_position(dev, data);
+
+	/* 4D mouse */ //UNTESTED
+	if (MOUSE_4D(state->device_id)) {
+		throttle = (((data[5] & 0x07) << 7) |
+			(data[6] & 0x7f));
+		if (data[8] & 0x08)
+			throttle = -throttle;
+		input_report_abs(dev, ABS_THROTTLE, throttle);
+	}
+
+	/* Lens cursor */
+	else if (LENS_CURSOR(state->device_id)) {
+		buttons = data[8];
+		send_buttons(dev, buttons, TYPE_CURSOR);
+	}
+
+	/* 2D mouse */ //UNTESTED
+	else if (MOUSE_2D(state->device_id)) {
+		buttons = (data[8] & 0x1C) >> 2;
+		send_buttons(dev, buttons, TYPE_CURSOR);
+		relwheel = - (data[8] & 1) +
+				((data[8] & 2) >> 1);
+		input_report_rel(dev, REL_WHEEL, relwheel);
+	}
+}
+
+//UNTESTED
+static void handle_second_cursor_packet(struct input_dev *dev, 
+					char *data, struct tool_state *state)
+{
+	int rotation;
+	
+	state->proximity = (data[0] & PROXIMITY_BIT);
+	if (!state->proximity) {
+		out_of_proximity_reset(dev, state);
+		return;
+	}
+
+	send_position(dev, data);
+
+	rotation = (((data[6] & 0x0f) << 7) |
+		(data[7] & 0x7f));
+	if (rotation < 900)
+		rotation = -rotation;
+	else 
+		rotation = 1799 - rotation;
+
+	//TODO: send rotation
 }
 
 static void handle_packet(struct wacom *wacom)
 {
-	int proximity, buttons, abswheel, relwheel, rotation, throttle;
-	int z, tiltx, tilty;
-	static int device_id, device;
-	static int discard_first = 0;
-
+	struct input_dev *dev = wacom->dev;
 	unsigned char *data = wacom->data;
-
-
-	if (data[0] & 1)
-		/* Channels can be implemented by sending serial numbers to 
-		 * wacom driver? */
-		dev_info(&wacom->dev->dev,
-				"Received something from second channel. "
-				"Not implemented yet -> Dropped!\n");
+	int channel = data[0] & 1;
+	struct tool_state *state = &wacom->tool_state[channel];
 
 	/* Device ID packet */
 	if ((data[0] & 0xfc) == 0xc0) {
-		proximity = 1;
-
-		device_id = ((data[1] & 0x7f) << 5) | ((data[2] & 0x7c) >> 2);
-		
-		device = (STYLUS_TOOL(device_id) ? STYLUS_DEVICE_ID :
-			  CURSOR_TOOL(device_id) ? CURSOR_DEVICE_ID :
-						   ERASER_DEVICE_ID);
-
-		input_report_key(wacom->dev, ABS_MISC, device);
-		
-		//discard_first = (device_id & 0xf06) != 0x802;
-		/* TODO: I don't really know why this was there in the old 
-		 * code -- doesn't seem to work with my intuos mouse 
-		 * (whenever the mouse sends its ID, this will stay 1, but 
-		 * my mouse only sends packets of the first kind) */
+		handle_device_id_packet(data, state);
 	}
-
 	/* Out of proximity packet */
-	else if ((data[0] & 0xfe) == 0x80)
-	{
-		proximity = 0;
+	else if ((data[0] & 0xfe) == 0x80) {
+		state->proximity = 0;
+		out_of_proximity_reset(dev, state);
+		state->device_id = 0;
 	}
-
 	/* General pen packet or eraser packet or airbrush first packet
 	 * airbrush second packet */
-	else if (((data[0] & 0xb8) == 0xa0) ||
-			((data[0] & 0xbe) == 0xb4))
-	{
-		send_position(wacom);
-
-		if ((data[0] & 0xb8) == 0xa0)
-		{
-			z = (((data[5] & 0x07) << 7) | (data[6] & 0x7f));
-			buttons = (data[0] & 0x06);
-			send_buttons(wacom, buttons, device);
-		}
-		else
-		{
-			/* 10 bits for absolute wheel position */
-			abswheel = (((data[5] & 0x07) << 7) |
-				(data[6] & 0x7f));
-		}
-		tiltx = (data[7] & TILT_BITS);
-		tilty = (data[8] & TILT_BITS);
-		if (data[7] & TILT_SIGN_BIT)
-			tiltx -= (TILT_BITS + 1);
-		if (data[8] & TILT_SIGN_BIT)
-			tilty -= (TILT_BITS + 1);
-		proximity = (data[0] & PROXIMITY_BIT);
-
-		input_report_abs(wacom->dev, ABS_TILT_X, tiltx);
-		input_report_abs(wacom->dev, ABS_TILT_Y, tilty);
-		input_report_abs(wacom->dev, ABS_PRESSURE, z);
+	else if (((data[0] & 0xb8) == 0xa0) || ((data[0] & 0xbe) == 0xb4)) {
+		handle_general_stylus_packet(dev, data, state);
 	}
-
 	/* 4D mouse 1st packet or Lens cursor packet or 2D mouse packet*/
-	//largely UNTESTED
-	else if (((data[0] & 0xbe) == 0xa8) ||
-			((data[0] & 0xbe) == 0xb0))
-	{
-		if (!discard_first)
-			send_position(wacom);
-
-		/* 4D mouse */
-		if (MOUSE_4D(device_id))
-		{
-			throttle = (((data[5] & 0x07) << 7) |
-				(data[6] & 0x7f));
-			if (data[8] & 0x08)
-				throttle = -throttle;
-			input_report_abs(wacom->dev, ABS_THROTTLE, throttle);
-		}
-
-		/* Lens cursor */
-		else if (LENS_CURSOR(device_id))
-		{
-			buttons = data[8];
-			send_buttons(wacom, buttons, device);
-		}
-
-		/* 2D mouse */
-		else if (MOUSE_2D(device_id))
-		{
-			buttons = (data[8] & 0x1C) >> 2;
-			send_buttons(wacom, buttons, device);
-			relwheel = - (data[8] & 1) +
-					((data[8] & 2) >> 1);
-			input_report_rel(wacom->dev, REL_WHEEL, relwheel);
-				//TODO range(relative?)/resolution -- need to flag capabliity?
-		}
-
-		proximity = (data[0] & PROXIMITY_BIT);
-	} /* end 4D mouse 1st packet */
-
-	/* 4D mouse 2nd packet */
-	//UNTESTED
-	else if ((data[0] & 0xbe) == 0xaa)
-	{
-		send_position(wacom);
-		rotation = (((data[6] & 0x0f) << 7) |
-			(data[7] & 0x7f));
-		if (rotation < 900)
-			rotation = -rotation;
-		else 
-			rotation = 1799 - rotation;
-
-		//TODO: send rotation
-
-		proximity = (data[0] & PROXIMITY_BIT);
-		discard_first = 0;
+	else if (((data[0] & 0xbe) == 0xa8) || ((data[0] & 0xbe) == 0xb0)) {
+		handle_first_cursor_packet(dev, data, state);
 	}
-
+	/* 4D mouse 2nd packet */
+	else if ((data[0] & 0xbe) == 0xaa) {
+		handle_second_cursor_packet(dev, data, state);
+	}
 	else {
-		dev_info(&wacom->dev->dev,
+		dev_info(&dev->dev,
 				"Received unknown protocol V packet type!\n");
 		return;
 	}
 
-	//TODO: remove redundancy if possible
-	if (!discard_first) {
-		input_report_key(wacom->dev, BTN_TOOL_MOUSE, proximity &&
-						device == CURSOR_DEVICE_ID);
-		input_report_key(wacom->dev, BTN_TOOL_RUBBER, proximity &&
-						device == ERASER_DEVICE_ID);
-		input_report_key(wacom->dev, BTN_TOOL_PEN, proximity &&
-						device == STYLUS_DEVICE_ID);
-	}
-
-	input_sync(wacom->dev);
+	input_event(dev, EV_MSC, MSC_SERIAL, state->serial_num);
+	input_report_key(dev, state->tool, state->proximity);
+	input_sync(dev);
 }
 
 static irqreturn_t wacom_interrupt(struct serio *serio, unsigned char data,
@@ -595,7 +683,9 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
 	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
 	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
-	//__set_bit(BTN_TOOL_LENS,	input_dev->keybit);
+	__set_bit(BTN_TOOL_LENS,	input_dev->keybit);
+
+	input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
 
 	serio_set_drvdata(serio, wacom);
 
