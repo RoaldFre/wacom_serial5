@@ -1,6 +1,8 @@
-wacom_serial -- A driver for old serial Wacom tablets
+wacom_serial5
+A driver for old serial Wacom protocol V tablets (Intuos and Intuos2)
 
-Initial code by julian (tokenrove), supporting protocol IV
+Code based on work of julian (tokenrove), who implemented a driver 
+supporting protocol IV serial tablets.
 http://cipht.net/2011/07/02/wacom_serial-initial-release.html
 Also see: http://ubuntuforums.org/showthread.php?t=1780154
 
