@@ -387,7 +387,8 @@ static void handle_general_stylus_packet(struct input_dev *dev,
 
 static void handle_device_id_packet(char *data, struct tool_state *state)
 {
-	state->proximity = 1;
+	state->proximity = 0; /* Don't enable it here, yet. Let a packet 
+				 with an actual valid position etc do it. */
 	state->device_id = ((data[1] & 0x7f) << 5) | 
 			((data[2] & 0x7c) >> 2);
 	
