@@ -44,8 +44,8 @@
 #include <linux/completion.h>
 
 /* XXX To be removed before (widespread) release. */
-#ifndef SERIO_WACOM_IV
-#define SERIO_WACOM_IV 0x3d
+#ifndef SERIO_WACOM_V
+#define SERIO_WACOM_V 0x3e
 #endif
 
 #define DRIVER_AUTHOR	"Roald Frederickx <roald.frederickx@gmail.com>"
@@ -571,7 +571,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->name = DEVICE_NAME;
 	input_dev->phys = wacom->phys;
 	input_dev->id.bustype = BUS_RS232;
-	input_dev->id.vendor  = SERIO_WACOM_IV;
+	input_dev->id.vendor  = SERIO_WACOM_V;
 	input_dev->id.product = serio->id.extra;
 	input_dev->id.version = 0x0100;
 	input_dev->dev.parent = &serio->dev;
@@ -619,7 +619,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 static struct serio_device_id wacom_serio_ids[] = {
 	{
 		.type	= SERIO_RS232,
-		.proto	= SERIO_WACOM_IV,
+		.proto	= SERIO_WACOM_V,
 		.id	= SERIO_ANY,
 		.extra	= SERIO_ANY,
 	},
