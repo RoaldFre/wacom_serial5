@@ -3,6 +3,9 @@ A driver for old serial Wacom protocol V tablets (Intuos and Intuos2)
 
 Code based on work of julian (tokenrove), who implemented a driver 
 supporting protocol IV serial tablets.
-http://cipht.net/2011/07/02/wacom_serial-initial-release.html
+
+INSTALLATION:
+Analog to the installation of the protocol IV driver. Follow instructions 
+at: http://cipht.net/2011/07/02/wacom_serial-initial-release.html
 Also see: http://ubuntuforums.org/showthread.php?t=1780154
 
