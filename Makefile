@@ -17,3 +17,6 @@ rm:
 	sync
 	sudo rmmod wacom_serial5
 	sync
+
+load:
+	make rm && make && make ins
