@@ -51,6 +51,11 @@
 #define SERIO_WACOM_V 0x3e
 #endif
 
+
+/* TODO copied from the kernel's wacom.h for now */
+#define USB_VENDOR_ID_WACOM	0x056a
+
+
 #define DRIVER_AUTHOR	"Roald Frederickx <roald.frederickx@gmail.com>"
 #define DEVICE_NAME	"Wacom protocol 5 serial tablet"
 #define DRIVER_DESC	DEVICE_NAME " driver"
@@ -268,7 +273,10 @@ static void send_buttons(struct input_dev *dev, int buttons, int is_stylus) {
 	 * duplication. Let's hope the compiler is smart enough to do that 
 	 * automagically.
 	 */
-	report_key(dev, buttons, 0, BTN_LEFT);
+	if (!is_stylus)
+		report_key(dev, buttons, 0, BTN_LEFT);
+		/* TODO: report BTN_TOUCH instead? -- however, bit 0 seems 
+		 * to be 0 all the time */
 	report_key(dev, buttons, 1, (is_stylus ?
 					BTN_STYLUS : BTN_MIDDLE));
 	report_key(dev, buttons, 2, (is_stylus ?
@@ -697,8 +705,13 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->name = DEVICE_NAME;
 	input_dev->phys = wacom->phys;
 	input_dev->id.bustype = BUS_RS232;
+#if 0
 	input_dev->id.vendor  = SERIO_WACOM_V;
 	input_dev->id.product = serio->id.extra;
+#else
+	input_dev->id.vendor  = USB_VENDOR_ID_WACOM;
+	input_dev->id.product = 0x24;
+#endif
 	input_dev->id.version = 0x0100;
 	input_dev->dev.parent = &serio->dev;
 
