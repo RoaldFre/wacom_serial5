@@ -419,8 +419,10 @@ static void handle_general_stylus_packet(struct input_dev *dev,
 	if (data[8] & TILT_SIGN_BIT)
 		tilty -= (TILT_BITS + 1);
 
-	input_report_abs(dev, ABS_TILT_X, tiltx);
-	input_report_abs(dev, ABS_TILT_Y, tilty);
+	/* TODO: xf86-wacom-input assumes a mintilt of 0 and only positive 
+	 * tilt values -- fix there or here? (here for now) */
+	input_report_abs(dev, ABS_TILT_X, tiltx + TILT_BITS + 1);
+	input_report_abs(dev, ABS_TILT_Y, tilty + TILT_BITS + 1);
 }
 
 static void handle_device_id_packet(char *data, struct tool_state *state)
@@ -527,7 +529,6 @@ static void handle_packet(struct wacom *wacom)
 	else if ((data[0] & 0xfe) == 0x80) {
 		state->proximity = 0;
 		out_of_proximity_reset(dev, state);
-		state->tool_id = 0;
 		state->device_id = 0; // XXX?
 	}
 	/* General pen packet or eraser packet or airbrush first packet
