@@ -361,6 +361,16 @@ static int device_type_from_tool(int tool)
 static void out_of_proximity_reset(struct input_dev *dev,
 						struct tool_state *state)
 {
+	/* Don't reset state if we already did so (= we already are out of 
+	 * prox). Otherwise we have problems with kernel event filtering 
+	 * (BTN_TOOL events remain 0 and get filtered out) when we have two 
+	 * tools on the tablet (the reset events will be assigned to the 
+	 * other tool if that one is still in prox). */
+	if (!state->proximity)
+		return;
+
+	state->proximity = 0;
+
 	/* Reset everything, otherwise we lose the initial states
 	 * when in-prox next time */
 	input_report_abs(dev, ABS_X, 0);
@@ -383,19 +393,31 @@ static void out_of_proximity_reset(struct input_dev *dev,
 		//input_report_key(dev, BTN_TOUCH, 0);
 		input_report_abs(dev, ABS_WHEEL, 0);
 	}
-	input_report_key(dev, state->tool, 0);
 }
+
+static int handle_proximity_bit(struct input_dev *dev,
+					char *data, struct tool_state *state)
+{
+	int proximity;
+
+	proximity = (data[0] & PROXIMITY_BIT);
+	if (!proximity) {
+		out_of_proximity_reset(dev, state);
+	} else {
+		state->proximity = 1;
+	}
+
+	return proximity;
+}
+
 
 static void handle_general_stylus_packet(struct input_dev *dev,
 					char *data, struct tool_state *state)
 {
 	int z, buttons, abswheel, tiltx, tilty;
 
-	state->proximity = (data[0] & PROXIMITY_BIT);
-	if (!state->proximity) {
-		out_of_proximity_reset(dev, state);
+	if (!handle_proximity_bit(dev, data, state))
 		return;
-	}
 
 	send_position(dev, data);
 
@@ -453,11 +475,8 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 {
 	int throttle, buttons, relwheel;
 
-	state->proximity = (data[0] & PROXIMITY_BIT);
-	if (!state->proximity) {
-		out_of_proximity_reset(dev, state);
+	if (!handle_proximity_bit(dev, data, state))
 		return;
-	}
 
 	send_position(dev, data);
 
@@ -492,11 +511,8 @@ static void handle_second_cursor_packet(struct input_dev *dev,
 {
 	int rotation;
 	
-	state->proximity = (data[0] & PROXIMITY_BIT);
-	if (!state->proximity) {
-		out_of_proximity_reset(dev, state);
+	if (!handle_proximity_bit(dev, data, state))
 		return;
-	}
 
 	send_position(dev, data);
 
@@ -527,7 +543,6 @@ static void handle_packet(struct wacom *wacom)
 
 	/* Out of proximity packet */
 	else if ((data[0] & 0xfe) == 0x80) {
-		state->proximity = 0;
 		out_of_proximity_reset(dev, state);
 		state->device_id = 0; // XXX?
 	}
@@ -550,7 +565,7 @@ static void handle_packet(struct wacom *wacom)
 		return;
 	}
 
-	input_report_abs(dev, ABS_MISC, state->tool_id);
+	//input_report_abs(dev, ABS_MISC, state->tool_id);
 	input_report_key(dev, state->tool, state->proximity);
 	input_event(dev, EV_MSC, MSC_SERIAL, state->serial_num);
 	input_sync(dev);
