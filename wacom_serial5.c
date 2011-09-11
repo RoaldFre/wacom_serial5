@@ -167,10 +167,14 @@ static void handle_model_response(struct wacom *wacom)
 	dev_info(&wacom->dev->dev, "Wacom tablet: %s, version %u.%u\n", p,
 		 major_v, minor_v);
 	input_set_abs_params(wacom->dev, ABS_PRESSURE, 0, MAX_Z, 0, 0);
+	/* XXX Report from 0 to 2 * TILT_BITS + 1 until upstream is fixed. 
+	 * Also see comment below when sending the data. */
 	input_set_abs_params(wacom->dev, ABS_TILT_X,
-					-(TILT_BITS + 1), TILT_BITS, 0, 0);
+					0, 2 * TILT_BITS + 1, 0, 0);
+					//-(TILT_BITS + 1), TILT_BITS, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_TILT_Y,
-					-(TILT_BITS + 1), TILT_BITS, 0, 0);
+					0, 2 * TILT_BITS + 1, 0, 0);
+					//-(TILT_BITS + 1), TILT_BITS, 0, 0);
 }
 
 
