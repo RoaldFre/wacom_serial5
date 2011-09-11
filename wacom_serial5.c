@@ -150,19 +150,10 @@ static void handle_model_response(struct wacom *wacom)
 	case MODEL_INTUOS:
 		p = "Intuos";
 		wacom->dev->id.version = MODEL_INTUOS;
-		input_abs_set_res(wacom->dev, ABS_X, 2540);
-		input_abs_set_res(wacom->dev, ABS_Y, 2540);
 		break;
-	case MODEL_INTUOS2: /* Intuos 2 is UNTESTED */
+	case MODEL_INTUOS2:
 		p = "Intuos2";
 		wacom->dev->id.version = MODEL_INTUOS2;
-		input_abs_set_res(wacom->dev, ABS_X, 2540);
-		input_abs_set_res(wacom->dev, ABS_Y, 2540);
-		input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
-			/* TODO: what other models have throttle? Does 
-			 * intuos1 have this too? Dependent on which tool 
-			 * you use? (mine doesn't... -- don't enable for 
-			 * intuos1?) */
 		break;
 	default:		/* UNTESTED */
 		dev_dbg(&wacom->dev->dev, "Didn't understand Wacom model "
@@ -431,7 +422,7 @@ static void handle_general_stylus_packet(struct input_dev *dev,
 	else {
 		abswheel = (((data[5] & 0x07) << 7) |
 			(data[6] & 0x7f));
-		//TODO: report wheel
+		input_report_abs(dev, ABS_WHEEL, abswheel);
 	}
 
 	tiltx = (data[7] & TILT_BITS);
@@ -713,6 +704,20 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_dev->evbit[0] = BIT_MASK(EV_KEY)
 			    | BIT_MASK(EV_ABS)
 			    | BIT_MASK(EV_REL);
+
+	input_set_capability(input_dev, EV_REL, REL_WHEEL);
+	input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
+
+	/* All intuos and intuos2 tablets have the same resolution. */
+	input_abs_set_res(wacom->dev, ABS_X, 2540);
+	input_abs_set_res(wacom->dev, ABS_Y, 2540);
+
+	/* For 4D mouse */
+	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+
+	/* For airbrush */
+	input_set_abs_params(wacom->dev, ABS_WHEEL, 0, 1023, 0, 0);
+
 	__set_bit(BTN_LEFT,		input_dev->keybit);
 	__set_bit(BTN_MIDDLE,		input_dev->keybit);
 	__set_bit(BTN_RIGHT,		input_dev->keybit);
@@ -729,8 +734,6 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	__set_bit(BTN_TOOL_LENS,	input_dev->keybit);
 
 	__set_bit(ABS_MISC,		input_dev->absbit);
-
-	input_set_capability(input_dev, EV_MSC, MSC_SERIAL);
 
 	serio_set_drvdata(serio, wacom);
 
