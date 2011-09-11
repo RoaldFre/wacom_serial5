@@ -675,27 +675,6 @@ static int wacom_setup(struct wacom *wacom, struct serio *serio)
 		return -EIO;
 	}
 
-	init_completion(&wacom->cmd_done);
-
-	/* My Intuos tablet won't respond to a configuration request, so it 
-	 * seems
-	 * TODO: Intuos2 does work? Or remove alltogether (seems to be 
-	 * removed altogether in older code) */
-	if (wacom->dev->id.version != MODEL_INTUOS) {
-		err = wacom_send(serio, REQUEST_CONFIGURATION_STRING);
-		if (err)
-			return err;
-
-		u = wait_for_completion_timeout(&wacom->cmd_done, HZ);
-		if (u == 0) {
-			dev_info(&wacom->dev->dev, "Timed out waiting for "
-					"tablet to respond with "
-					"configuration string.\n");
-			return -EIO;
-		}
-	}
-
-	init_completion(&wacom->cmd_done);
 	err = wacom_send(serio, REQUEST_MAX_COORDINATES);
 	if (err)
 		return err;
