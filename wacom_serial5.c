@@ -732,10 +732,13 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	__set_bit(BTN_TASK,		input_dev->keybit);
 	__set_bit(BTN_STYLUS,		input_dev->keybit);
 	__set_bit(BTN_STYLUS2,		input_dev->keybit);
-	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
-	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
-	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
+	__set_bit(BTN_TOOL_AIRBRUSH,	input_dev->keybit);
+	__set_bit(BTN_TOOL_BRUSH,	input_dev->keybit);
 	__set_bit(BTN_TOOL_LENS,	input_dev->keybit);
+	__set_bit(BTN_TOOL_MOUSE,	input_dev->keybit);
+	__set_bit(BTN_TOOL_PEN,		input_dev->keybit);
+	__set_bit(BTN_TOOL_PENCIL,	input_dev->keybit);
+	__set_bit(BTN_TOOL_RUBBER,	input_dev->keybit);
 
 	__set_bit(ABS_MISC,		input_dev->absbit);
 
