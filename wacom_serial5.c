@@ -494,8 +494,8 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 	else if (MOUSE_2D(state->tool_id)) {
 		buttons = (data[8] & 0x1C) >> 2;
 		send_buttons(dev, buttons, 0);
-		relwheel = - (data[8] & 1) +
-				((data[8] & 2) >> 1);
+
+		relwheel = (data[8] & 1) - ((data[8] & 2) >> 1);
 		input_report_rel(dev, REL_WHEEL, relwheel);
 	}
 }
