@@ -6,16 +6,6 @@
  *
  * Protocol 5 is implemented by Roald Frederickx 
  * <roald.frederickx@gmail.com>.
- * As of now, I can only test it myself on an old Wacom Intuos1 with stylus 
- * and old 5-button mouse.
- *
- * Sections I have been unable to test personally due to lack of available
- * hardware are marked UNTESTED.  Much of what is marked UNTESTED comes from
- * old wcmSerial code in linuxwacom 0.9.0 or xf86-input-wacom.
- *  - The last tree of xf86-input-wacom that still has the serial code:
- *    f0c8aa9962e0238557d103baa4a5ba57484fd1c9
- *  - The commit that removed serial support:
- *    b3cba4e3543a98103282ba8fa55bf38012d23d9f
  *
  *
  * This driver was developed with reference to much code written by others,
@@ -29,6 +19,11 @@
  *  - new and old versions of linuxwacom / xf86-input-wacom credited to
  *    Frederic Lepied, France. <Lepied@XFree86.org> and
  *    Ping Cheng, Wacom. <pingc@wacom.com>;
+ *    For reference:
+ *      * The last tree of xf86-input-wacom that still has the serial code:
+ *        f0c8aa9962e0238557d103baa4a5ba57484fd1c9
+ *      * The commit that removed serial support:
+ *        b3cba4e3543a98103282ba8fa55bf38012d23d9f
  *  - and xf86wacom.c (a presumably ancient version of the linuxwacom 
  *    code), by Frederic Lepied and Raph Levien <raph@gtk.org>.
  */
