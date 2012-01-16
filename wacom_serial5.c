@@ -380,7 +380,7 @@ static void out_of_proximity_reset(struct input_dev *dev,
 		input_report_key(dev, BTN_SIDE, 0);
 		input_report_key(dev, BTN_EXTRA, 0);
 		input_report_abs(dev, ABS_THROTTLE, 0);
-		//input_report_abs(dev, ABS_RZ, 0);
+		input_report_abs(dev, ABS_RZ, 0);
 	} else {
 		input_report_abs(dev, ABS_PRESSURE, 0);
 		input_report_key(dev, BTN_STYLUS, 0);
