@@ -493,7 +493,7 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 		send_buttons(dev, buttons, 0);
 	}
 
-	/* 2D mouse */ //UNTESTED
+	/* 2D mouse */
 	else if (MOUSE_2D(state->tool_id)) {
 		buttons = (data[8] & 0x1C) >> 2;
 		send_buttons(dev, buttons, 0);
