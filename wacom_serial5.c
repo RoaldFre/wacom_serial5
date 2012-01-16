@@ -155,7 +155,7 @@ static void handle_model_response(struct wacom *wacom)
 		p = "Intuos2";
 		wacom->dev->id.version = MODEL_INTUOS2;
 		break;
-	default:		/* UNTESTED */
+	default:
 		dev_dbg(&wacom->dev->dev, "Didn't understand Wacom model "
 				"string: \"%s\". Maybe you want the "
 				"protocol IV driver instead of this one?\n",
@@ -475,8 +475,11 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 
 	send_position(dev, data);
 
-	/* 4D mouse */ //UNTESTED
+	/* 4D mouse */
 	if (MOUSE_4D(state->tool_id)) {
+		buttons = ((data[8] & 0x70) >> 1) |
+			   (data[8] & 0x07);
+		send_buttons(dev, buttons, 0);
 		throttle = (((data[5] & 0x07) << 7) |
 			(data[6] & 0x7f));
 		if (data[8] & 0x08)
@@ -500,7 +503,6 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 	}
 }
 
-//UNTESTED
 static void handle_second_cursor_packet(struct input_dev *dev, 
 					char *data, struct tool_state *state)
 {
@@ -517,8 +519,7 @@ static void handle_second_cursor_packet(struct input_dev *dev,
 		rotation = -rotation;
 	else 
 		rotation = 1799 - rotation;
-
-	//TODO: send rotation
+	input_report_abs(dev, ABS_RZ, rotation);
 }
 
 static void handle_packet(struct wacom *wacom)
@@ -623,7 +624,7 @@ static int send_setup_string(struct wacom *wacom, struct serio *serio)
 	const char *s;
 	switch (wacom->dev->id.version) {
 	case MODEL_INTUOS:
-	case MODEL_INTUOS2: /* UNTESTED, but should be the same */
+	case MODEL_INTUOS2:
 		s = COMMAND_MULTI_MODE_INPUT
 			COMMAND_ID
 			COMMAND_TRANSMIT_AT_MAX_RATE
@@ -718,6 +719,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 
 	/* For 4D mouse */
 	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_RZ, -899, 900, 0, 0);
 
 	/* For airbrush */
 	input_set_abs_params(wacom->dev, ABS_WHEEL, 0, 1023, 0, 0);
