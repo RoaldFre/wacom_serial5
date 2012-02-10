@@ -119,7 +119,6 @@ struct wacom {
 	struct completion cmd_done;
 	int idx;
 	unsigned char data[32];
-	char phys[32];
 	struct tool_state tool_state[2]; /* state per channel */
 };
 
@@ -678,7 +677,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 {
 	struct wacom *wacom;
 	struct input_dev *input_dev;
-	int err = -ENOMEM;
+	int err;
 
 	wacom = kzalloc(sizeof(struct wacom), GFP_KERNEL);
 	input_dev = input_allocate_device();
@@ -686,10 +685,8 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 		goto fail0;
 
 	wacom->dev = input_dev;
-	snprintf(wacom->phys, sizeof(wacom->phys), "%s/input0", serio->phys);
 
 	input_dev->name = DEVICE_NAME;
-	input_dev->phys = wacom->phys;
 	input_dev->id.bustype = BUS_RS232;
 #if 0
 	input_dev->id.vendor  = SERIO_WACOM_V;
