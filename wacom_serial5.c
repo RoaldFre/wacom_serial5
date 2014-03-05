@@ -623,6 +623,7 @@ static int send_setup_string(struct wacom *wacom, struct serio *serio)
 			COMMAND_ID
 			COMMAND_TRANSMIT_AT_MAX_RATE
 			COMMAND_START_SENDING_PACKETS;
+		break;
 	default:
 		/* TODO: remove this all together? All protocol5 tablets 
 		 * seem to use the string above.*/
