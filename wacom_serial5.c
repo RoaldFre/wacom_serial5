@@ -373,7 +373,8 @@ static void out_of_proximity_reset(struct input_dev *dev,
 		input_report_key(dev, BTN_RIGHT, 0);
 		input_report_key(dev, BTN_SIDE, 0);
 		input_report_key(dev, BTN_EXTRA, 0);
-		input_report_abs(dev, ABS_THROTTLE, 0);
+//		input_report_abs(dev, ABS_THROTTLE, 0);
+		input_report_abs(dev, ABS_WHEEL, 0);
 		input_report_abs(dev, ABS_RZ, 0);
 	} else {
 		input_report_abs(dev, ABS_PRESSURE, 0);
@@ -462,6 +463,7 @@ static void handle_device_id_packet(char *data, struct tool_state *state)
 static void handle_first_cursor_packet(struct input_dev *dev, 
 					char *data, struct tool_state *state)
 {
+	static int delay = 0;
 	int throttle, buttons, relwheel;
 
 	if (!handle_proximity_bit(dev, data, state))
@@ -478,7 +480,27 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 			(data[6] & 0x7f));
 		if (data[8] & 0x08)
 			throttle = -throttle;
-		input_report_abs(dev, ABS_THROTTLE, throttle);
+//		input_report_abs(dev, ABS_THROTTLE, throttle);
+//new code in place of previous line
+// This code gives scroll wheel capabilities to thumbwheel on 4D 
+// Puck mouse. SEM 5/21/2015
+
+		delay += throttle;
+
+		if (delay > 800){
+			throttle = -1;
+			delay -= 800;
+		}
+		else if (delay < -800){
+			throttle = 1;
+			delay += 800;
+		}
+		else{
+			throttle = 0;
+		}
+
+		input_report_rel(dev, REL_WHEEL, throttle);
+// end of New Code
 	}
 
 	/* Lens cursor */
@@ -711,7 +733,8 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_abs_set_res(wacom->dev, ABS_Y, 2540);
 
 	/* For 4D mouse */
-	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+//	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_RZ, -899, 900, 0, 0);
 
 	/* For airbrush */
