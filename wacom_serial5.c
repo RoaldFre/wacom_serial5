@@ -59,6 +59,26 @@
 MODULE_AUTHOR(DRIVER_AUTHOR);
 MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL");
+// module paramaters for thumbwheel configuration
+static int thumbwheel = 0;
+static int th_mode = 0; // default to scroll mode
+static int pos_delay = 800;
+static int neg_delay = -800;
+static int deadband = 0;
+static int thumbwheel_offset = 0;
+module_param(thumbwheel,int, (S_IRUSR | S_IRGRP | S_IROTH));
+MODULE_PARM_DESC(thumbwheel, "Current value of thumbwheel");
+module_param(th_mode,int, 0664);
+MODULE_PARM_DESC(th_mode, "Set to 1 to act as absolute thumbwheel, 0 for relative scroll");
+module_param(pos_delay,int, 0664);
+MODULE_PARM_DESC(pos_delay, "Positive delay limit");
+module_param(neg_delay,int, 0664);
+MODULE_PARM_DESC(neg_delay, "Negative delay limit");
+module_param(deadband,int, 0664);
+MODULE_PARM_DESC(deadband, "Minimum value from offset that will get an action");
+module_param(thumbwheel_offset,int, 0664);
+MODULE_PARM_DESC(thumbwheel_offset, "Compensate for thumbwheel that returns to offset value");
+
 
 #define REQUEST_MODEL_AND_ROM_VERSION	"~#\r"
 #define REQUEST_MAX_COORDINATES		"~C\r"
@@ -104,7 +124,6 @@ MODULE_LICENSE("GPL");
 #define MOUSE_4D(id)     ((id & 0x07ff) == 0x0094)
 #define MOUSE_2D(id)     ((id & 0x07ff) == 0x0007)
 #define LENS_CURSOR(id)  ((id & 0x07ff) == 0x0096)
-
 
 struct tool_state {
 	int tool;		/* BTN_TOOL_XXX */
@@ -480,26 +499,33 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 			(data[6] & 0x7f));
 		if (data[8] & 0x08)
 			throttle = -throttle;
-//		input_report_abs(dev, ABS_THROTTLE, throttle);
-//new code in place of previous line
-// This code gives scroll wheel capabilities to thumbwheel on 4D 
-// Puck mouse. SEM 5/21/2015
+		thumbwheel = throttle;
+		// This code gives scroll wheel capabilities to thumbwheel on 4D 
+		// Puck mouse. SEM /21/2015
+		throttle += thumbwheel_offset;
+		if (th_mode) // Abs Throttle mode
+			input_report_abs(dev, ABS_THROTTLE, throttle);
+		else { // Scroll wheel mode
+			if ((throttle < deadband) & (throttle > - deadband))
+				throttle = 0;
+			if (throttle == 0)
+				delay =0;
+			delay += throttle;
 
-		delay += throttle;
+			if (delay > pos_delay){
+				throttle = -1;
+				delay -= pos_delay;
+			}
+			else if (delay < neg_delay){
+				throttle = 1;
+				delay -= neg_delay;
+			}
+			else{
+				throttle = 0;
+			}
 
-		if (delay > 800){
-			throttle = -1;
-			delay -= 800;
+			input_report_rel(dev, REL_WHEEL, throttle);
 		}
-		else if (delay < -800){
-			throttle = 1;
-			delay += 800;
-		}
-		else{
-			throttle = 0;
-		}
-
-		input_report_rel(dev, REL_WHEEL, throttle);
 // end of New Code
 	}
 
