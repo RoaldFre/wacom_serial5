@@ -68,15 +68,15 @@ static int deadband = 0;
 static int thumbwheel_offset = 0;
 module_param(thumbwheel,int, (S_IRUSR | S_IRGRP | S_IROTH));
 MODULE_PARM_DESC(thumbwheel, "Current value of thumbwheel");
-module_param(th_mode,int, 0664);
+module_param(th_mode, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(th_mode, "Set to 1 to act as absolute thumbwheel, 0 for relative scroll");
-module_param(pos_delay,int, 0664);
+module_param(pos_delay, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(pos_delay, "Positive delay limit");
-module_param(neg_delay,int, 0664);
+module_param(neg_delay, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(neg_delay, "Negative delay limit");
-module_param(deadband,int, 0664);
+module_param(deadband, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(deadband, "Minimum value from offset that will get an action");
-module_param(thumbwheel_offset,int, 0664);
+module_param(thumbwheel_offset, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(thumbwheel_offset, "Compensate for thumbwheel that returns to offset value");
 
 
@@ -499,34 +499,29 @@ static void handle_first_cursor_packet(struct input_dev *dev,
 			(data[6] & 0x7f));
 		if (data[8] & 0x08)
 			throttle = -throttle;
-		thumbwheel = throttle;
-		// This code gives scroll wheel capabilities to thumbwheel on 4D 
-		// Puck mouse. SEM /21/2015
-		throttle += thumbwheel_offset;
-		if (th_mode) // Abs Throttle mode
+		thumbwheel = throttle; // Report decoded value to userspace
+		throttle -= thumbwheel_offset;
+		if (th_mode) { // Abs Throttle mode
 			input_report_abs(dev, ABS_THROTTLE, throttle);
-		else { // Scroll wheel mode
-			if ((throttle < deadband) & (throttle > - deadband))
+		} else { // Scroll wheel mode
+			if ((throttle < deadband) && (throttle > -deadband))
 				throttle = 0;
 			if (throttle == 0)
-				delay =0;
+				delay = 0;
 			delay += throttle;
 
-			if (delay > pos_delay){
-				throttle = -1;
-				delay -= pos_delay;
-			}
-			else if (delay < neg_delay){
-				throttle = 1;
-				delay -= neg_delay;
-			}
-			else{
+			if (delay > pos_delay) {
+				throttle = -delay/pos_delay;
+				delay += throttle*pos_delay;
+			} else if (delay < neg_delay) {
+				throttle = delay/neg_delay;
+				delay -= throttle*neg_delay;
+			} else {
 				throttle = 0;
 			}
 
 			input_report_rel(dev, REL_WHEEL, throttle);
 		}
-// end of New Code
 	}
 
 	/* Lens cursor */
@@ -759,8 +754,8 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	input_abs_set_res(wacom->dev, ABS_Y, 2540);
 
 	/* For 4D mouse */
-//	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
-	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
+//	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_RZ, -899, 900, 0, 0);
 
 	/* For airbrush */
