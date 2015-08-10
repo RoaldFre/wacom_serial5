@@ -755,8 +755,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 
 	/* For 4D mouse */
 	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
-//	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
-	input_set_abs_params(wacom->dev, ABS_RZ, -899, 900, 0, 0);
+	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
 
 	/* For airbrush */
 	input_set_abs_params(wacom->dev, ABS_WHEEL, 0, 1023, 0, 0);
