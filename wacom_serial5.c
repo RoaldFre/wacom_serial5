@@ -66,7 +66,7 @@ static int pos_delay = 800;
 static int neg_delay = -800;
 static int deadband = 0;
 static int thumbwheel_offset = 0;
-module_param(thumbwheel,int, (S_IRUSR | S_IRGRP | S_IROTH));
+module_param(thumbwheel, int, (S_IRUSR | S_IRGRP | S_IROTH));
 MODULE_PARM_DESC(thumbwheel, "Current value of thumbwheel");
 module_param(th_mode, int, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH);
 MODULE_PARM_DESC(th_mode, "Set to 1 to act as absolute thumbwheel, 0 for relative scroll");
@@ -392,8 +392,7 @@ static void out_of_proximity_reset(struct input_dev *dev,
 		input_report_key(dev, BTN_RIGHT, 0);
 		input_report_key(dev, BTN_SIDE, 0);
 		input_report_key(dev, BTN_EXTRA, 0);
-//		input_report_abs(dev, ABS_THROTTLE, 0);
-		input_report_abs(dev, ABS_WHEEL, 0);
+		input_report_abs(dev, ABS_THROTTLE, 0);
 		input_report_abs(dev, ABS_RZ, 0);
 	} else {
 		input_report_abs(dev, ABS_PRESSURE, 0);
@@ -755,8 +754,8 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 
 	/* For 4D mouse */
 	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
-	input_set_abs_params(wacom->dev, ABS_WHEEL, -1023, 1023, 0, 0);
-
+	input_set_abs_params(wacom->dev, ABS_RZ, -899, 899, 0, 0);
+	
 	/* For airbrush */
 	input_set_abs_params(wacom->dev, ABS_WHEEL, 0, 1023, 0, 0);
 
