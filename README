@@ -9,3 +9,12 @@ Analog to the installation of the protocol IV driver. Follow instructions
 at: http://cipht.net/2011/07/02/wacom_serial-initial-release.html
 Also see: http://ubuntuforums.org/showthread.php?t=1780154
 
+These user space parameters can be used to customize the behavior of a 4D puck mouse.
+Parameter:
+    thumbwheel        -- Read Only: Value of last read of thumb wheel
+    th_mode           -- Read/Write: 1 sets to absolute thumb wheel mode 0 sets to Relative scroll wheel mode (Default = 0)
+    thumbwheel_offset -- Read/Write: Used for a thumb wheel that relaxes to a non zero value (Set equal to thumbwheel value when relaxed)
+    deadband          -- Read/Write: Used to remove jitter when a thumb wheel is relaxed (Default 0)
+    pos_delay         -- Read/Write: Used to adjust the scroll speed based on the thumb wheel position (Default 800)
+    neg_delay         -- Read/Write: Used to adjust the scroll speed based on the thumb wheel position (Default -800)
+
