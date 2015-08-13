@@ -460,7 +460,7 @@ static void handle_device_id_packet(char *data, struct tool_state *state)
 	int tool_id, tool;
 	state->proximity = 0; /* Don't enable it here, yet. Let a packet 
 				 with an actual valid position etc do it. */
-	
+
 	state->serial_num = ((data[2] & 0x03) << 30) |
 			((data[3] & 0x7f) << 23) |
 			((data[4] & 0x7f) << 16) |
@@ -474,7 +474,7 @@ static void handle_device_id_packet(char *data, struct tool_state *state)
 
 	tool = tool_from_tool_id(tool_id);
 	state->tool = tool;
-	
+
 	//state->device_type = device_type_from_tool(tool);
 }
 
@@ -543,7 +543,7 @@ static void handle_second_cursor_packet(struct input_dev *dev,
 					char *data, struct tool_state *state)
 {
 	int rotation;
-	
+
 	if (!handle_proximity_bit(dev, data, state))
 		return;
 
@@ -755,7 +755,7 @@ static int wacom_connect(struct serio *serio, struct serio_driver *drv)
 	/* For 4D mouse */
 	input_set_abs_params(wacom->dev, ABS_THROTTLE, -1023, 1023, 0, 0);
 	input_set_abs_params(wacom->dev, ABS_RZ, -899, 899, 0, 0);
-	
+
 	/* For airbrush */
 	input_set_abs_params(wacom->dev, ABS_WHEEL, 0, 1023, 0, 0);
 
